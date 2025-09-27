@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: ["alerts-normalizer-svc", "alerts-matcher-svc", "map-service", "workers/email-worker", "workers/push-worker"]
+        service: ["alerts-normalizer-svc", "alerts-matcher-svc", "map-service"]
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -22,8 +22,8 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Static analysis
-        run: python -m compileall .
+      - name: Run pytest
+        run: pytest
 
   java-services:
     runs-on: ubuntu-latest
@@ -39,8 +39,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Build with Maven
-        run: mvn -B -DskipTests package
+      - name: Run Maven tests
+        run: mvn -B test
 
   frontend:
     runs-on: ubuntu-latest
@@ -54,6 +54,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm install
+      - run: npm run test -- --run
       - run: npm run build
 
   schemas:

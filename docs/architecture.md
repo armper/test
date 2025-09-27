@@ -1,44 +1,61 @@
 # System Architecture
 
 ## Overview
-The enterprise refactor introduces a hybrid Python/Spring Boot platform centered on Apache Kafka with Schema Registry. Postgres + PostGIS remains the single source of truth for users, polygons, alert records, and notification outcomes. Events flow through Kafka topics with Avro schemas and idempotent producers.
+The platform ingests NOAA alerts, normalizes and enriches them, runs spatial matching, and delivers tailored notifications across email, push, and SMS channels. Python/Faust services handle event ingestion and matching, while Spring Boot services own orchestration, preferences, and administrative workflows. Kafka with Schema Registry provides the event backbone; Postgres/PostGIS stores persistent state.
 
-## Services
+```
+NOAA API → alerts-normalizer-svc → alerts-matcher-svc → notification-router-service → channel workers → end users
+                               ↘ Postgres/PostGIS (polygons, preferences, audit)
+```
 
-### Python / Faust Workers
-- **alerts-normalizer-svc** – Periodically hits `api.weather.gov`, persists raw features, and publishes both raw and normalized alerts (`noaa.alerts.*` topics).
-- **alerts-matcher-svc** – Subscribes to normalized alerts, queries PostGIS using `ST_Intersects`, emits user matches, and prepares dispatch requests.
-- **map-service** – FastAPI CRUD for user polygons (GeoJSON) and catalog metadata. Writes to PostGIS.
-- **email-worker** – Kafka consumer placeholder for SES/SendGrid. Emits outcomes to `notify.outcome.v1`.
-- **push-worker** – Mock FCM/APNs sender; same outcome semantics.
+## Component topology
+### Ingestion & normalization
+- `alerts-normalizer-svc` polls `api.weather.gov`, stores a raw copy of each alert and emits normalized Avro messages.
+- Fault tolerance is handled by Kafka retention, enabling replay when downstream services are unavailable.
 
-### Spring Boot Services
-- **notification-router-service** – Stateless Kafka router. Applies quiet hours, severity filters, and channel preferences before fanning out to `notify.{email,push,sms}.request.v1`. Uses transactional producers.
-- **sms-worker-service** – Mock Twilio integration persisting dispatch logs and writing status outcomes.
-- **user-service** – OAuth2/JWT-capable auth, RBAC, and preference management. Exposes REST APIs and integrates with Kafka for downstream events.
-- **admin-service** – Dashboards summarizing Postgres metrics; extend to incorporate Kafka outcome streams.
+### Spatial matching & dispatch requests
+- `alerts-matcher-svc` consumes normalized alerts and executes `ST_Intersects` joins against subscriber polygons in PostGIS.
+- Matches are emitted on `alerts.matches.user.v1` for analytics and `notify.dispatch.request.v1` for dispatch orchestration.
 
-## Kafka Backbone
-- Topics enumerated in `schemas/avro`. Each has BACKWARD-compatible Avro schema.
-- Producers key records on `user_id` to guarantee ordering per subscriber.
-- `notify.dispatch.request.v1` is the contract between matcher and router; router fans out to channel-specific topics and writes DLQs when dispatch fails.
-- Schema Registry (Confluent compatible) enforces compatibility during CI via `fastavro` validation (extend to SR compatibility checks in future).
+### Preference-aware routing
+- `notification-router-service` consumes dispatch requests, evaluates quiet hours, severity preferences, and channel opt-ins, then publishes to `notify.{email,push,sms}.request.v1`.
+- Dead-letter queues (`dlq.*`) capture failures for replay.
 
-## Data Stores
-- Single `weather` Postgres database with PostGIS extension. Tables defined in `database/migrations/001_init.sql`.
-- Redis reserved for ephemeral caching/extensions (future use).
+### Channel workers
+- `email-worker`, `push-worker`, and `sms-worker-service` deliver channel-specific messages (mock implementations in development) and emit `notify.outcome.v1` records along with Postgres audit entries.
+- Replace channel workers with production-grade provider integrations by reusing the topic contracts.
 
-## Security & Auth
-- Spring Security (user-service) issues/validates JWTs. Endpoints honor role-based access (user/admin).
-- Service-to-service auth assumed via network policies and Kafka ACLs (configure in production).
+### User-facing APIs and dashboards
+- `user-service` provides OAuth2/JWT auth, profile management, and preference APIs.
+- `map-service` exposes polygon CRUD endpoints for subscribers.
+- `admin-service` surfaces operational dashboards backed by Postgres and Kafka outcomes.
+- `frontend` (React + Vite) interacts with these APIs and can be deployed independently or behind a gateway.
 
-## Deployment
-- Docker Compose spins up Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, and all services for local dev.
-- Helm chart (`infrastructure/k8s/helm/weather-alerts`) seeds Kubernetes manifests; extend with secrets, Ingress, and autoscaling.
+## Event flow summary
+1. `alerts-normalizer-svc` fetches NOAA alerts on a schedule, writes raw payloads, and emits normalized Avro events.
+2. `alerts-matcher-svc` pulls normalized alerts, resolves affected subscribers using PostGIS polygons, and emits match events plus dispatch requests.
+3. `notification-router-service` reads dispatch requests, enforces preference logic, and fans out to channel-specific Kafka topics.
+4. Channel workers consume their respective topics, simulate delivery, and write `notify.outcome.v1` events.
+5. Outcomes feed `admin-service` dashboards and persist to Postgres for auditing.
+6. Operators monitor Kafka UI, Schema Registry, and logs to maintain healthy message flow.
 
-## Event Flow Summary
-1. `alerts-normalizer-svc` fetches NOAA alerts and publishes normalized Avro records.
-2. `alerts-matcher-svc` reads normalized alerts, intersects polygons in PostGIS, and emits user-specific matches + dispatch requests.
-3. `notification-router-service` evaluates preferences, quiet hours, and severity to route events into channel request topics.
-4. Channel workers (email/push/sms) execute delivery (mocked for SMS/push/email in dev) and write outcomes to Kafka + Postgres.
-5. Downstream analytics (admin-service, Kafka UI) consume `notify.outcome.v1` for dashboards and auditing.
+## Data stores & contracts
+- **Postgres/PostGIS:** canonical storage for users, polygons, preferences, and notification outcomes. See [`docs/data-and-schemas.md`](data-and-schemas.md).
+- **Kafka:** event backbone with Avro schemas stored in [`schemas/avro`](../schemas/avro). Producers use keyed, idempotent transactions to guarantee ordering per subscriber.
+- **Redis:** optional cache for future work (rate limiting, dedupe, session storage).
+
+## Security & access control
+- `user-service` issues JWTs via Spring Security; propagate tokens to frontends and downstream services.
+- Production deployments should configure Kafka ACLs, TLS, and secret management (Vault, AWS Secrets Manager, etc.).
+- Network policy and service mesh layers (e.g., Istio) can enforce zero-trust communication between services.
+
+## Deployment topologies
+- **Local development:** Docker Compose orchestrates dependencies and app containers. Ideal for testing end-to-end flows.
+- **Kubernetes:** Helm chart (`infrastructure/k8s/helm/weather-alerts`) supplies Deployments, Services, and ConfigMaps. Extend it with Ingress, HorizontalPodAutoscaler, and Prometheus `ServiceMonitor` resources.
+- **CI/CD:** GitHub Actions (`.github/workflows/ci.yml`) builds language-specific artifacts, validates Avro schemas, and exercises container builds. Integrate with GitOps tools (Argo CD, Flux) for continuous delivery.
+
+## Extensibility roadmap
+- Swap mock channel workers with production providers (Twilio, SendGrid, FCM).
+- Introduce OpenTelemetry tracing across Python and Spring Boot services, exporting to Prometheus/Grafana/Tempo.
+- Enhance analytics by pushing `notify.outcome.v1` into data warehouses (BigQuery, Snowflake) for retention and BI.
+- Add backpressure monitoring and auto-scaling policies based on Kafka lag metrics.

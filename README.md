@@ -1,90 +1,108 @@
 # Weather Alerts Enterprise Platform
 
-Hybrid Python + Spring Boot microservices delivering NOAA (api.weather.gov) alerts with Kafka as the event backbone, Postgres + PostGIS as source of truth, and channel workers for email, push, and mock SMS.
+Modern weather-alert distribution platform composed of Python (FastAPI + Faust) and Spring Boot microservices, Kafka for event streaming, and Postgres/PostGIS as the system of record. The stack delivers NOAA (api.weather.gov) alert ingestion, matching, and multi-channel notification fan-out.
 
-## Service Inventory
+- **Docs:** start with [`docs/index.md`](docs/index.md) or the GitHub Pages site published from `/docs`.
+- **Quick start:** `docker compose up --build` brings up brokers, data stores, and every service for local experimentation.
+- **Services:** alerts ingestion and matching, user-facing APIs, mock notification workers for push, email, and SMS.
 
-### Python (FastAPI + Faust)
-- **alerts-normalizer-svc** – Scheduled NOAA ingestion, normalization, and publication to `noaa.alerts.*` Kafka topics.
-- **alerts-matcher-svc** – Consumes normalized alerts, executes PostGIS `ST_Intersects` against user polygons, emits matches to downstream topics.
-- **map-service** – GeoJSON polygon CRUD backed by PostGIS for alert subscriptions.
-- **push-worker** – Consumes `notify.push.request.v1`, mocks FCM/APNs fan-out, mirrors outcomes to Kafka.
-- **email-worker** – Consumes `notify.email.request.v1`, placeholder SendGrid/SES integration.
+---
 
-### Spring Boot
-- **notification-router-service** – Kafka consumer/producer applying user preferences, quiet hours, severity filters; routes to channel topics with idempotent transactions.
-- **sms-worker-service** – Mock Twilio worker persisting SMS logs to Postgres and emitting outcomes.
-- **user-service** – OAuth2-ready auth service with Spring Security, JWT scaffolding, role management, and Kafka connectivity hooks.
-- **admin-service** – Simple dashboard surfacing Postgres metrics; extend to query Kafka outcomes.
+## Platform Highlights
+- End-to-end NOAA alert lifecycle: ingestion → spatial matching → preference-aware routing → channel delivery.
+- Kafka + Schema Registry enforce Avro contracts and transactional, keyed producers for per-user ordering.
+- Shared Postgres/PostGIS database captures polygons, preferences, and notification audit trails.
+- Extensible worker model for integrating real email, push, or SMS providers.
+- Deployment ready for local Docker Compose and Kubernetes Helm-based rollouts.
 
-All services interoperate via Kafka (with Schema Registry) and shared Postgres schemas defined in `database/migrations/001_init.sql`.
+## Repository Layout
+| Path | What lives here |
+| --- | --- |
+| `services/alerts-normalizer-svc`, `services/alerts-matcher-svc`, `services/map-service` | Python/Faust ingestion, matching, and polygon APIs |
+| `services/workers/{email-worker,push-worker}` | Kafka channel workers for email and push notifications |
+| `services/java/{notification-router-service,sms-worker-service,user-service,admin-service}` | Spring Boot services for orchestration, SMS, auth, and admin dashboards |
+| `frontend/` | React + Vite SPA for end-user and admin dashboards |
+| `database/` | Postgres/PostGIS migrations and seed data |
+| `schemas/avro/` | Avro schema definitions for every Kafka topic |
+| `infrastructure/k8s/helm/weather-alerts/` | Starter Helm chart for cluster deployments |
+| `docs/` | Markdown sources for the documentation site and architecture deep-dives |
+| `scripts/` | Tooling such as `validate_avro.py` for schema compatibility checks |
 
-## Kafka Contracts
+## Getting Started
 
-Avro schemas for every topic live in `schemas/avro/`. The CI pipeline runs `scripts/validate_avro.py` to enforce compatibility. Primary topics:
+### Prerequisites
+- Docker Engine 24+ with Compose plugin
+- Python 3.11+ and `pip` for running scripts or FastAPI workers outside of Docker
+- Java 17+ and Maven (if you need to run Spring Boot services locally)
+- Node.js 18+ (for developing the frontend)
 
-- `noaa.alerts.raw.v1`
-- `noaa.alerts.normalized.v1`
-- `alerts.matches.user.v1`
-- `notify.dispatch.request.v1`
-- `notify.email.request.v1`
-- `notify.push.request.v1`
-- `notify.sms.request.v1`
-- `notify.outcome.v1`
-- Dead-letter topics `dlq.*` (configure in broker).
-
-Producers default to a per-user key and enable idempotence/transactions.
-
-## Local Development (Docker Compose)
-
-The new `docker-compose.yml` provisions Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, and all hybrid services.
-
+### Launch the full stack
 ```bash
 docker compose up --build
 ```
 
-Key endpoints:
+Compose provisions Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, the hybrid microservices, and the React frontend. Use `.env` files in each service directory to override secrets (JWT keys, provider credentials) as needed.
 
+### Key local endpoints
 - Kafka bootstrap (external): `localhost:19092`
 - Schema Registry: `http://localhost:9081`
 - Kafka UI: `http://localhost:8085`
 - Postgres: `postgres://weather:weather@localhost:5432/weather`
-- alerts-normalizer health: `http://localhost:8006/healthz`
-- alerts-matcher health: `http://localhost:8007/healthz`
-- Spring Boot apps on ports `8001` (user), `8005` (admin), `8100` (router), `8101` (sms)
-- Map service: `http://localhost:8003`
+- Map Service: `http://localhost:8003`
+- Alerts normalizer health probe: `http://localhost:8006/healthz`
+- Alerts matcher health probe: `http://localhost:8007/healthz`
+- Spring Boot services: `user-service` on `8001`, `admin-service` on `8005`, `notification-router-service` on `8100`, `sms-worker-service` on `8101`
+- Frontend (nginx container): `http://localhost:3000`
+- Frontend dev server (optional): run `npm run dev` in `frontend/` for hot reload at `http://localhost:5173`
 
-Use `.env` files per service to supply secrets (JWT signing keys, provider credentials). Twilio/SMS is mocked; swapping to real Twilio requires wiring credentials into `sms-worker-service`.
+### Authentication quick start
+- Register an end-user: `POST http://localhost:8001/api/v1/auth/register` with body `{"email":"demo@example.com","password":"passw0rd"}`.
+- Admin dashboard uses HTTP basic auth: `admin / admin123` at `http://localhost:8005/`.
 
-## Kubernetes (Helm)
+## Services at a Glance
+| Name | Stack | Role |
+| --- | --- | --- |
+| `alerts-normalizer-svc` | FastAPI, Faust | Scheduled NOAA ingestion and alert normalization; publishes to `noaa.alerts.*` topics |
+| `alerts-matcher-svc` | FastAPI, Faust | Subscribes to normalized alerts, runs `ST_Intersects` joins against polygons, emits user matches |
+| `map-service` | FastAPI | CRUD APIs for user polygons backed by PostGIS |
+| `notification-router-service` | Spring Boot | Applies user preferences, quiet hours, and severity filters before routing notifications |
+| `email-worker`, `push-worker`, `sms-worker-service` | Python, Spring Boot | Mock channel providers for email, push, and SMS with Kafka outcome mirroring |
+| `user-service` | Spring Boot | OAuth2-ready authentication, JWT issuance, RBAC, and user preference APIs |
+| `admin-service` | Spring Boot | Operational dashboard surfacing Postgres/Kafka metrics |
 
-`infrastructure/k8s/helm/weather-alerts` contains a starter Helm chart with deployments for core workloads. Tune `values.yaml` to point at your Kafka and Postgres endpoints, adjust replica counts, and extend with Ingress/ServiceMonitor definitions as needed.
+## Kafka & Schemas
+- Avro schema sources live in `schemas/avro/` with CI validation through `scripts/validate_avro.py`.
+- Core topics: `noaa.alerts.raw.v1`, `noaa.alerts.normalized.v1`, `alerts.matches.user.v1`, `notify.dispatch.request.v1`, `notify.email.request.v1`, `notify.push.request.v1`, `notify.sms.request.v1`, and `notify.outcome.v1` plus the `dlq.*` family.
+- Producers key by `user_id`, enable idempotence, and wrap in transactions to keep channel fan-out consistent.
 
-## CI/CD
+## Deployment & Operations
+- **Docker Compose:** default local developer experience spinning up the entire ecosystem.
+- **Kubernetes:** `infrastructure/k8s/helm/weather-alerts` contains a starter Helm chart; customize `values.yaml` for environment-specific configuration, secrets, and ingress.
+- **CI/CD:** `.github/workflows/ci.yml` builds Python and Java services, validates schemas, and exercises container builds. Extend it with Schema Registry compatibility checks, security scanning, and deployment automation.
 
-`.github/workflows/ci.yml` builds Python services, Maven projects, validates Avro schemas, and exercises container builds. Extend the workflow with schema compatibility gates (e.g., Confluent SR checks) and deployment automation (Argo CD, Flux, etc.).
-
-## Database Migrations
-
-`database/migrations/001_init.sql` bootstraps:
-
-- `user_accounts`, `user_roles`
-- `alerts`, `alert_subscriptions`
-- `user_preferences`
-- `sms_dispatch_logs`, `notification_outcomes`
-
-Apply via `psql` or migration tooling before deploying services.
+## Database & Migrations
+`database/migrations/001_init.sql` provisions the Postgres schema, including `user_accounts`, `user_roles`, `alerts`, `alert_subscriptions`, `user_preferences`, `sms_dispatch_logs`, and `notification_outcomes`. Apply via `psql`, Flyway, or your preferred migration tooling before deploying to shared environments.
 
 ## Development Tips
+- Faust-based services (`alerts-normalizer-svc`, `alerts-matcher-svc`, channel workers) can run locally with `faust -A app.stream worker -l info` when you need rapid iteration outside of Docker.
+- Spring Boot services expose `/actuator/health` and can switch environment profiles via `SPRING_PROFILES_ACTIVE`.
+- Monitor Kafka topics and consumer lag through Kafka UI (`http://localhost:8085`).
+- Treat schema evolution as backward compatible; bump Avro versions and rerun validation in CI before merging.
 
-- Faust-based services (`alerts-normalizer-svc`, `alerts-matcher-svc`, workers) use `faust-streaming`. Run locally with `faust -A app.stream worker -l info` for stream processors.
-- Spring Boot services expose `/actuator/health` by default; use `SPRING_PROFILES_ACTIVE` to toggle config for docker vs. kubernetes.
-- Use the Kafka UI to monitor topic offsets and ensure idempotent producers transact as expected.
-- Schema evolution must remain backward compatible—update Avro files and bump topic schema versions accordingly.
+## Testing
+- Python services use pytest integration tests located under `services/*/tests`. Run `pytest` in each service directory (CI executes them automatically).
+- Spring Boot services ship with JUnit integration tests leveraging H2 and embedded Kafka where required (`mvn test`).
+- Frontend tests run with Vitest/Testing Library (`npm run test`).
+The GitHub Actions workflow orchestrates all three suites before building container images.
 
-## Roadmap
+## Roadmap Ideas
+- Replace the mock SMS implementation with a production-grade Twilio integration.
+- Add OpenTelemetry-based tracing fed into Prometheus/Grafana/Tempo or alternative observability stacks.
+- Expand the admin dashboard with real-time Kafka metrics and user-level analytics.
+- Integrate with external OAuth2 providers and propagate JWTs to downstream services for channel filtering.
 
-- Replace SMS mock with real Twilio integration and secrets management.
-- Instrument services with OpenTelemetry, pushing traces to Prometheus/Grafana/Tempo stack.
-- Expand admin-service to surface real-time Kafka metrics (KSQL/ksqlDB or interactive queries).
-- Harden auth with OAuth2 providers and propagate JWT to downstream services for channel filtering.
+## Further Reading
+- [`docs/getting-started.md`](docs/getting-started.md) — end-to-end setup, troubleshooting tips, and service-specific workflows.
+- [`docs/architecture.md`](docs/architecture.md) — deep dive into system components, data flow, and deployment topology.
+- [`docs/services.md`](docs/services.md) — detailed service reference with ports, dependencies, and health checks.
+- [`docs/data-and-schemas.md`](docs/data-and-schemas.md) — Avro contracts, database schema, and migration guidance.

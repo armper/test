@@ -6,4 +6,6 @@ geoalchemy2==0.14.4
 shapely==2.0.2
 pydantic==1.10.14
 python-dotenv==1.0.0
+pytest==7.4.4
+httpx==0.25.2
 numpy==1.26.4

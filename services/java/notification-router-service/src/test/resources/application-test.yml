@@ -1,0 +1,16 @@
+spring:
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers}
+    consumer:
+      group-id: notification-router-test
+      auto-offset-reset: earliest
+  main:
+    allow-bean-definition-overriding: true
+kafka:
+  bootstrap-servers: ${spring.embedded.kafka.brokers}
+  consumer:
+    group-id: notification-router-test
+topics:
+  notify-email: test.notify.email
+  notify-push: test.notify.push
+  notify-sms: test.notify.sms
