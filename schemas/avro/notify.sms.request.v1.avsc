@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "SmsRequest",
+  "namespace": "com.weather.notification",
+  "fields": [
+    { "name": "user_id", "type": "string" },
+    { "name": "phone_number", "type": "string" },
+    { "name": "message", "type": "string" },
+    { "name": "match", "type": "com.weather.alerts.UserAlertMatch" }
+  ]
+}

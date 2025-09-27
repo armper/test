@@ -1,0 +1,30 @@
+imagePullPolicy: IfNotPresent
+postgres:
+  host: weather-postgres
+  port: 5432
+  database: weather
+  user: weather
+  password: weather
+kafka:
+  bootstrapServers: kafka:9092
+schemaRegistry:
+  url: http://schema-registry:8081
+services:
+  alertsNormalizer:
+    image: alerts-normalizer-svc:latest
+  alertsMatcher:
+    image: alerts-matcher-svc:latest
+  mapService:
+    image: map-service:latest
+  notificationRouter:
+    image: notification-router-service:latest
+  smsWorker:
+    image: sms-worker-service:latest
+  userService:
+    image: user-service:latest
+  adminService:
+    image: admin-service:latest
+  emailWorker:
+    image: email-worker:latest
+  pushWorker:
+    image: push-worker:latest

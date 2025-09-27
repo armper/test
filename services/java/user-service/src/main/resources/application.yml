@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${DATABASE_URI:jdbc:postgresql://postgres:5432/users}
+    username: ${DATABASE_USER:weather}
+    password: ${DATABASE_PASSWORD:weather}
+  jpa:
+    hibernate:
+      ddl-auto: none
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        issuer-uri: ${JWT_ISSUER:http://localhost/auth}

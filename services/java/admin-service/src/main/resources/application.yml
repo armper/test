@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: admin-service
+  datasource:
+    url: ${DATABASE_URI:jdbc:postgresql://postgres:5432/admin}
+    username: ${DATABASE_USER:weather}
+    password: ${DATABASE_PASSWORD:weather}
+  thymeleaf:
+    cache: false
+  security:
+    user:
+      name: admin
+      password: admin123
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics

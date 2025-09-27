@@ -1,0 +1,26 @@
+{
+  "title": "Weather Alerts Overview",
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Notification Dispatch Rate",
+      "targets": [
+        {
+          "expr": "rate(notification_service_notifications_total[5m])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "RabbitMQ Queue Depth",
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages_ready{queue=\"weather_alerts_queue\"}",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}

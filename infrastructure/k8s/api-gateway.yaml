@@ -1,0 +1,46 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: weather-gateway
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - host: weather.local
+      http:
+        paths:
+          - path: /user-service(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8001
+          - path: /alert-service(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: alert-service
+                port:
+                  number: 8002
+          - path: /map-service(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: map-service
+                port:
+                  number: 8003
+          - path: /notification-service(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 8004
+          - path: /admin-service(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-service
+                port:
+                  number: 8005

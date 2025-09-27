@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: Map Service API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com/map-service
+paths:
+  /api/v1/cities:
+    get:
+      summary: List supported cities
+      responses:
+        '200':
+          description: City GeoJSON collection
+  /api/v1/regions:
+    post:
+      summary: Create region polygon for user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegionCreate'
+      responses:
+        '200':
+          description: Region created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Region'
+  /api/v1/regions/{userId}:
+    get:
+      summary: List user regions
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Region list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Region'
+components:
+  schemas:
+    RegionCreate:
+      type: object
+      required: [user_id, area_geojson]
+      properties:
+        user_id:
+          type: string
+        name:
+          type: string
+        area_geojson:
+          type: object
+        properties:
+          type: object
+    Region:
+      allOf:
+        - $ref: '#/components/schemas/RegionCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            created_at:
+              type: string
+              format: date-time

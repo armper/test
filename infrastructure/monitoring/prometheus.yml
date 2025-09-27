@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:8001']
+  - job_name: 'alert-service'
+    static_configs:
+      - targets: ['alert-service:8002']
+  - job_name: 'map-service'
+    static_configs:
+      - targets: ['map-service:8003']
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service:8004']
+  - job_name: 'admin-service'
+    static_configs:
+      - targets: ['admin-service:8005']

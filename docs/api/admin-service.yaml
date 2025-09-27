@@ -1,0 +1,84 @@
+openapi: 3.0.3
+info:
+  title: Admin Service API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com/admin-service
+paths:
+  /api/v1/summary:
+    get:
+      summary: Platform summary metrics
+      responses:
+        '200':
+          description: Summary payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSummary'
+  /api/v1/audit:
+    get:
+      summary: List audit logs
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Audit records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+    post:
+      summary: Create audit log entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditLogCreate'
+      responses:
+        '200':
+          description: Created record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+components:
+  schemas:
+    AdminSummary:
+      type: object
+      properties:
+        total_users:
+          type: integer
+        total_alerts:
+          type: integer
+        total_notifications:
+          type: integer
+    AuditLogCreate:
+      type: object
+      required: [admin_id, action, target]
+      properties:
+        admin_id:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+        detail:
+          type: string
+        extra:
+          type: object
+    AuditLog:
+      allOf:
+        - $ref: '#/components/schemas/AuditLogCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            created_at:
+              type: string
+              format: date-time

@@ -1,0 +1,133 @@
+# Root-level gitignore for multi-service project
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.vscode-test/
+*.code-workspace
+.project
+.classpath
+.settings/
+*.iml
+*.ipr
+*.iws
+.fleet/
+.vs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!.env.test
+
+# Logs and runtime output
+logs/
+*.log
+*.pid
+*.pid.lock
+*.seed
+
+# Dependency & package manager directories
+node_modules/
+jspm_packages/
+bower_components/
+venv/
+.env/
+ENV/
+.venv/
+env/
+
+# Build outputs & caches
+coverage/
+htmlcov/
+.htmlcov/
+.nyc_output/
+dist/
+**/build/
+.cache/
+.vite/
+.next/
+.nuxt/
+.happypack/
+.parcel-cache/
+.sass-cache/
+.cache-loader/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
+.eggs/
+.installed.cfg
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+# Java / JVM artifacts
+*.class
+.target/
+target/
+out/
+.gradle/
+.gradle-cache/
+.mtj.tmp/
+hs_err_pid*
+!.mvn/wrapper/maven-wrapper.jar
+
+# Package manager logs
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+npm-debug.log*
+lerna-debug.log*
+*.lock.hold
+
+# Docker / Compose helpers
+**/.dockerignore.swp
+
+# Database & local data files
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.sql-journal
+
+# Terraform & IaC
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+terraform.tfstate.d/
+.cr-scan/
+
+# Test and analysis artifacts
+junit.xml
+reports/
+artifacts/
+.coverage
+.coverage.*
+pytestdebug.log
+
+# Temporary files
+.tmp/
+tmp/
+.temp/
+temp/

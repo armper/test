@@ -1,0 +1,9 @@
+faust-streaming==0.10.10
+fastapi==0.109.0
+uvicorn[standard]==0.24.0.post1
+sqlalchemy==2.0.23
+geoalchemy2==0.14.4
+psycopg2-binary==2.9.9
+python-dotenv==1.0.0
+pydantic==1.10.14
+loguru==0.7.2

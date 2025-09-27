@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: sms-worker-service
+  datasource:
+    url: ${DATABASE_URI:jdbc:postgresql://postgres:5432/notifications}
+    username: ${DATABASE_USER:weather}
+    password: ${DATABASE_PASSWORD:weather}
+  jpa:
+    hibernate:
+      ddl-auto: none
+kafka:
+  bootstrap-servers: ${KAFKA_BROKER:localhost:19092}
+
+topics:
+  outcome: notify.outcome.v1

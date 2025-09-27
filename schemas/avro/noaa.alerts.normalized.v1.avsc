@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "NormalizedAlert",
+  "namespace": "com.weather.alerts",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "sent", "type": {"type": "long", "logicalType": "timestamp-millis"} },
+    { "name": "effective", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null },
+    { "name": "expires", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null },
+    { "name": "event", "type": ["null", "string"], "default": null },
+    { "name": "severity", "type": ["null", "string"], "default": null },
+    { "name": "urgency", "type": ["null", "string"], "default": null },
+    { "name": "area_geom", "type": ["null", "string"], "doc": "GeoJSON geometry" },
+    { "name": "source", "type": "string", "default": "noaa" }
+  ]
+}

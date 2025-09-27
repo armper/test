@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: map-service-config
+  labels:
+    app: map-service
+data:
+  MAP_SERVICE_DATABASE_URI: postgresql+psycopg2://weather:weather@postgres:5432/map_service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: map-service
+  labels:
+    app: map-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: map-service
+  template:
+    metadata:
+      labels:
+        app: map-service
+    spec:
+      containers:
+        - name: map-service
+          image: ghcr.io/example/map-service:latest
+          ports:
+            - containerPort: 8003
+          envFrom:
+            - configMapRef:
+                name: map-service-config
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: map-service
+spec:
+  selector:
+    app: map-service
+  ports:
+    - port: 8003
+      targetPort: 8003

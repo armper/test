@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "PushRequest",
+  "namespace": "com.weather.notification",
+  "fields": [
+    { "name": "user_id", "type": "string" },
+    { "name": "device_token", "type": "string" },
+    { "name": "title", "type": "string" },
+    { "name": "body", "type": "string" },
+    { "name": "match", "type": "com.weather.alerts.UserAlertMatch" }
+  ]
+}

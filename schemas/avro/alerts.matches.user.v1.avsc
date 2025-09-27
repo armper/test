@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "UserAlertMatch",
+  "namespace": "com.weather.alerts",
+  "fields": [
+    { "name": "alert_id", "type": "string" },
+    { "name": "user_id", "type": "string" },
+    { "name": "event", "type": ["null", "string"], "default": null },
+    { "name": "severity", "type": ["null", "string"], "default": null },
+    { "name": "sent", "type": {"type": "long", "logicalType": "timestamp-millis"} },
+    { "name": "subscription_id", "type": "long" },
+    { "name": "match_score", "type": "float", "default": 1.0 }
+  ]
+}

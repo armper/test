@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: notification-router-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKER:localhost:19092}
+    consumer:
+      group-id: notification-router
+      properties:
+        isolation.level: read_committed
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+kafka:
+  bootstrap-servers: ${KAFKA_BROKER:localhost:19092}
+  consumer:
+    group-id: ${KAFKA_CONSUMER_GROUP:notification-router}
+  transactional-id: notification-router-tx
+
+topics:
+  notify-email: notify.email.request.v1
+  notify-push: notify.push.request.v1
+  notify-sms: notify.sms.request.v1

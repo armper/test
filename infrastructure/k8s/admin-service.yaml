@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-service-config
+  labels:
+    app: admin-service
+data:
+  ADMIN_SERVICE_DATABASE_URI: postgresql+psycopg2://weather:weather@postgres:5432/admin_service
+  USER_SERVICE_BASE_URL: http://user-service/api/v1
+  ALERT_SERVICE_BASE_URL: http://alert-service/api/v1
+  NOTIFICATION_SERVICE_BASE_URL: http://notification-service/api/v1
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: admin-service-secret
+  labels:
+    app: admin-service
+stringData:
+  ADMIN_JWT_SECRET: super-secret
+  USER_SERVICE_ADMIN_TOKEN: placeholder
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-service
+  labels:
+    app: admin-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-service
+  template:
+    metadata:
+      labels:
+        app: admin-service
+    spec:
+      containers:
+        - name: admin-service
+          image: ghcr.io/example/admin-service:latest
+          ports:
+            - containerPort: 8005
+          envFrom:
+            - configMapRef:
+                name: admin-service-config
+            - secretRef:
+                name: admin-service-secret
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8005
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-service
+spec:
+  selector:
+    app: admin-service
+  ports:
+    - port: 8005
+      targetPort: 8005

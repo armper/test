@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alerts-normalizer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alerts-normalizer
+  template:
+    metadata:
+      labels:
+        app: alerts-normalizer
+    spec:
+      containers:
+        - name: alerts-normalizer
+          image: {{ .Values.services.alertsNormalizer.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: KAFKA_BROKER
+              value: {{ .Values.kafka.bootstrapServers | quote }}
+            - name: SCHEMA_REGISTRY_URL
+              value: {{ .Values.schemaRegistry.url | quote }}
+            - name: NOAA_USER_AGENT
+              value: "WeatherAlertsEnterprise/0.1 (helm@example.com)"
+          ports:
+            - containerPort: 8006
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8006
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alerts-normalizer
+spec:
+  selector:
+    app: alerts-normalizer
+  ports:
+    - port: 8006
+      targetPort: 8006

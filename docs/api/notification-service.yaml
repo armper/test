@@ -1,0 +1,74 @@
+openapi: 3.0.3
+info:
+  title: Notification Service API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com/notification-service
+paths:
+  /api/v1/logs:
+    get:
+      summary: List notification logs
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Notification logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationLog'
+  /api/v1/dispatch:
+    post:
+      summary: Manually dispatch notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+      responses:
+        '202':
+          description: Accepted
+components:
+  schemas:
+    NotificationRequest:
+      type: object
+      required: [alert_id, user_id, title]
+      properties:
+        alert_id:
+          type: integer
+        user_id:
+          type: string
+        event:
+          type: string
+        severity:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        channels:
+          type: object
+          additionalProperties:
+            type: boolean
+    NotificationLog:
+      allOf:
+        - $ref: '#/components/schemas/NotificationRequest'
+        - type: object
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time

@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-service-config
+  labels:
+    app: notification-service
+data:
+  NOTIFICATION_SERVICE_DATABASE_URI: postgresql+psycopg2://weather:weather@postgres:5432/notification_service
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  RABBITMQ_EXCHANGE: weather_alerts
+  RABBITMQ_ROUTING_KEY: alert.notification
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notification-service-secret
+  labels:
+    app: notification-service
+stringData:
+  SENDGRID_API_KEY: placeholder
+  TWILIO_ACCOUNT_SID: placeholder
+  TWILIO_AUTH_TOKEN: placeholder
+  TWILIO_FROM_NUMBER: +15550000000
+  FCM_SERVER_KEY: placeholder
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: ghcr.io/example/notification-service:latest
+          ports:
+            - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: notification-service-config
+            - secretRef:
+                name: notification-service-secret
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8004
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8004
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 8004
+      targetPort: 8004

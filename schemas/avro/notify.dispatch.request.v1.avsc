@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "DispatchRequest",
+  "namespace": "com.weather.notification",
+  "fields": [
+    { "name": "user_id", "type": "string" },
+    { "name": "match", "type": "com.weather.alerts.UserAlertMatch" },
+    {
+      "name": "preferences",
+      "type": {
+        "type": "record",
+        "name": "UserPreferences",
+        "fields": [
+          { "name": "channels", "type": {"type": "map", "values": "boolean"}, "default": {} },
+          { "name": "quiet_hours", "type": ["null", {
+            "type": "record",
+            "name": "QuietHours",
+            "fields": [
+              { "name": "start", "type": "string" },
+              { "name": "end", "type": "string" }
+            ]
+          }], "default": null },
+          { "name": "severity_filter", "type": ["null", "string"], "default": null }
+        ]
+      }
+    }
+  ]
+}
