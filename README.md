@@ -53,7 +53,8 @@ Compose provisions Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, th
 - Alerts matcher health probe: `http://localhost:8007/healthz`
 - Spring Boot services: `user-service` on `8001`, `admin-service` on `8005`, `notification-router-service` on `8100`, `sms-worker-service` on `8101`
 - Frontend (nginx container): `http://localhost:3000`
-- Frontend dev server (optional): run `npm run dev` in `frontend/` for hot reload at `http://localhost:5173`
+  - Frontend dev server (optional): run `npm run dev` in `frontend/` for hot reload at `http://localhost:5173`
+  - Override API target during Docker build with `--build-arg VITE_API_BASE_URL=https://gateway.yourdomain/api`
 
 ### Authentication quick start
 - Register an end-user: `POST http://localhost:8001/api/v1/auth/register` with body `{"email":"demo@example.com","password":"passw0rd"}`.
