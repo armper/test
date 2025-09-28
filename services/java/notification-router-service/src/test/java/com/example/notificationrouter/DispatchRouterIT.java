@@ -29,13 +29,15 @@ class DispatchRouterIT {
 
     @Test
     void routesEmailRequests() {
-        var producerProps = Map.of(
+        Map<String, Object> producerProps = Map.of(
             org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.getBrokersAsString(),
             org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, org.apache.kafka.common.serialization.StringSerializer.class,
             org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, org.apache.kafka.common.serialization.StringSerializer.class
         );
 
-        KafkaTemplate<String, String> template = new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(producerProps));
+        KafkaTemplate<String, String> template = new KafkaTemplate<>(
+            new DefaultKafkaProducerFactory<>(producerProps)
+        );
         var message = "{\"user_preferences\":{\"channels\":{\"email\":true},\"quiet_hours\":null,\"severity_filter\":null}}";
         template.send("notify.dispatch.request.v1", message);
         template.flush();

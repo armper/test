@@ -50,7 +50,7 @@ export const fetchAlerts = async () => {
 };
 
 export const fetchRegions = async (userId: string) => {
-  const { data } = await client.get(`/map-service/regions/${userId}`);
+  const { data } = await client.get<Region[]>(`/map-service/regions/${userId}`);
   return data;
 };
 
@@ -155,3 +155,12 @@ export const listCities = async () => {
 };
 
 export default client;
+
+export interface Region {
+  id: number;
+  user_id: string;
+  name?: string;
+  area_geojson: any;
+  properties?: Record<string, unknown>;
+  created_at: string;
+}

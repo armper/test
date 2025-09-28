@@ -1,9 +1,7 @@
-import type { Feature } from 'geojson';
-import { useEffect, useMemo, useState } from 'react';
-import MapEditor from '../components/MapEditor';
-import ConditionAlertsPanel from '../components/ConditionAlertsPanel';
+import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { createRegion, fetchAlerts, fetchRegions, listCities } from '../services/api';
+import { fetchAlerts } from '../services/api';
 
 interface AlertItem {
   id: number;
@@ -13,99 +11,68 @@ interface AlertItem {
   sent: string;
 }
 
-const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
-
 const Dashboard = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [regions, setRegions] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAlerts().then(setAlerts).catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchRegions(user.id.toString()).then(setRegions).catch(console.error);
-  }, [user]);
-
-  useEffect(() => {
-    listCities().then((data) => setCities(data.features || [])).catch(console.error);
-  }, []);
-
-  const mapCenter = useMemo(() => {
-    const location = user?.default_location as { lat?: number; lng?: number } | undefined;
-    if (location?.lat && location?.lng) {
-      return [location.lat, location.lng] as [number, number];
-    }
-    if (cities.length > 0) {
-      const first = cities[0].geometry.coordinates;
-      return [first[1], first[0]] as [number, number];
-    }
-    return DEFAULT_CENTER;
-  }, [user, cities]);
-
-  const handleSaveRegion = async (feature: Feature) => {
-    if (!user) return;
-    setStatus('Saving region…');
-    try {
-      await createRegion({
-        user_id: user.id.toString(),
-        name: 'My Area',
-        area_geojson: feature.geometry,
-      });
-      const updated = await fetchRegions(user.id.toString());
-      setRegions(updated);
-      setStatus('Region saved!');
-    } catch (error) {
-      console.error(error);
-      setStatus('Failed to save region');
-    }
-  };
-
   return (
-    <div className="page">
-      <header className="page-header">
-        <h1>Welcome back{user?.full_name ? `, ${user.full_name}` : ''}</h1>
-        <button onClick={logout}>Sign out</button>
-      </header>
-
-      <section>
-        <h2>Active Alerts</h2>
-        <div className="card-grid">
-          {alerts.map((alert) => (
-            <article key={alert.id} className={`card severity-${alert.severity?.toLowerCase() ?? 'unknown'}`}>
-              <h3>{alert.title}</h3>
-              <p>{alert.event}</p>
-              <span>{new Date(alert.sent).toLocaleString()}</span>
-            </article>
-          ))}
+    <div className="page-section">
+      <div className="section-header">
+        <div>
+          <h2>Welcome back{user?.full_name ? `, ${user.full_name}` : ''}</h2>
+          <p>Stay up to date on the weather stories that matter to you.</p>
         </div>
+        <div className="quick-actions">
+          <Link to="/custom-alerts" className="action">
+            Custom alerts
+          </Link>
+          <Link to="/areas" className="action secondary">
+            Manage areas
+          </Link>
+        </div>
+      </div>
+
+      <section className="card">
+        <header className="section-subheader">
+          <h3>Active NOAA Alerts</h3>
+          <span>{alerts.length} currently impacting your watchlist</span>
+        </header>
+        {alerts.length > 0 ? (
+          <div className="card-grid">
+            {alerts.map((alert) => (
+              <article key={alert.id} className={`card-item severity-${alert.severity?.toLowerCase() ?? 'unknown'}`}>
+                <h4>{alert.title}</h4>
+                <p>{alert.event}</p>
+                <span>{new Date(alert.sent).toLocaleString()}</span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p>No active alerts in your saved regions right now.</p>
+        )}
       </section>
 
-      <section>
-        <h2>Manage Alert Areas</h2>
-        <MapEditor center={mapCenter} onSave={handleSaveRegion} />
-        {status && <p>{status}</p>}
-        <ul>
-          {regions.map((region) => (
-            <li key={region.id}>{region.name ?? 'Custom area'} ({region.properties?.description ?? 'GeoJSON'})</li>
-          ))}
-        </ul>
-      </section>
-
-      <ConditionAlertsPanel />
-
-      <section>
-        <h2>Suggested Cities</h2>
-        <div className="pill-list">
-          {cities.map((city: any) => (
-            <span key={city.properties.name} className="pill">
-              {city.properties.name}, {city.properties.state}
-            </span>
-          ))}
+      <section className="card highlights">
+        <h3>Boost your weather awareness</h3>
+        <div className="highlight-grid">
+          <div>
+            <h4>Everyday reminders</h4>
+            <p>Get nudges when it gets too hot, too cold, too windy, or too rainy.</p>
+            <Link to="/custom-alerts" className="link-inline">
+              Set up a custom alert →
+            </Link>
+          </div>
+          <div>
+            <h4>Shape your map</h4>
+            <p>Draw neighborhoods and travel routes so we watch the right places.</p>
+            <Link to="/areas" className="link-inline">
+              Edit saved areas →
+            </Link>
+          </div>
         </div>
       </section>
     </div>

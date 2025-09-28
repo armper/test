@@ -1,4 +1,6 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { LatLngLiteral } from 'leaflet';
 import {
   ConditionSubscription,
   ConditionSubscriptionCreatePayload,
@@ -6,8 +8,11 @@ import {
   deleteConditionSubscription,
   listConditionSubscriptions,
   runConditionEvaluation,
+  fetchRegions,
+  type Region,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import LocationPicker from './LocationPicker';
 
 const CONDITION_CONFIG: Record<ConditionSubscription['condition_type'], {
   label: string;
@@ -57,6 +62,8 @@ interface FormState {
 const ConditionAlertsPanel = () => {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState<ConditionSubscription[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [selectedRegionId, setSelectedRegionId] = useState<number | 'custom'>('custom');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -72,14 +79,6 @@ const ConditionAlertsPanel = () => {
     };
   }, [user]);
 
-  useEffect(() => {
-    setForm((prev) => ({
-      ...prev,
-      latitude: initialLocation.lat,
-      longitude: initialLocation.lng,
-    }));
-  }, [initialLocation.lat, initialLocation.lng]);
-
   const [form, setForm] = useState<FormState>(() => {
     const startingType: FormState['condition_type'] = 'temperature_hot';
     const config = CONDITION_CONFIG[startingType];
@@ -93,16 +92,49 @@ const ConditionAlertsPanel = () => {
   });
 
   useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      latitude: initialLocation.lat,
+      longitude: initialLocation.lng,
+    }));
+  }, [initialLocation.lat, initialLocation.lng]);
+
+  useEffect(() => {
     if (!user) {
       setAlerts([]);
+      setRegions([]);
       return;
     }
+
     setLoading(true);
-    listConditionSubscriptions(user.id.toString())
-      .then((items) => setAlerts(items))
+    Promise.all([
+      listConditionSubscriptions(user.id.toString()),
+      fetchRegions(user.id.toString()),
+    ])
+      .then(([alertItems, regionItems]) => {
+        setAlerts(alertItems);
+        setRegions(regionItems);
+        if (regionItems.length && selectedRegionId === 'custom') {
+          const center = extractRegionCenter(regionItems[0].area_geojson);
+          if (center) {
+            setSelectedRegionId(regionItems[0].id);
+            setForm((prev) => ({ ...prev, latitude: center.lat, longitude: center.lng }));
+          }
+        }
+      })
       .catch(() => setError('Unable to load custom alerts right now.'))
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    if (selectedRegionId === 'custom') return;
+    const region = regions.find((item) => item.id === selectedRegionId);
+    if (!region) return;
+    const center = extractRegionCenter(region.area_geojson);
+    if (center) {
+      setForm((prev) => ({ ...prev, latitude: center.lat, longitude: center.lng }));
+    }
+  }, [selectedRegionId, regions]);
 
   const updateForm = (updates: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...updates }));
@@ -172,6 +204,11 @@ const ConditionAlertsPanel = () => {
     }
   };
 
+  const handleLocationChange = (coords: LatLngLiteral) => {
+    updateForm({ latitude: coords.lat, longitude: coords.lng });
+    setSelectedRegionId('custom');
+  };
+
   if (!user) {
     return null;
   }
@@ -180,37 +217,78 @@ const ConditionAlertsPanel = () => {
     <section className="card">
       <header className="card-header">
         <h2>Everyday Weather Alerts</h2>
-        <p>Set friendly reminders for the everyday moments that matter most.</p>
+        <p>Choose a spot, pick a condition, and we’ll nudge you when it happens.</p>
       </header>
 
       <form className="condition-form" onSubmit={handleSubmit}>
-        <div className="field">
-          <label htmlFor="condition-type">Alert type</label>
-          <select
-            id="condition-type"
-            value={form.condition_type}
-            onChange={(event) => handleConditionChange(event.target.value as FormState['condition_type'])}
-          >
-            {Object.entries(CONDITION_CONFIG).map(([value, info]) => (
-              <option key={value} value={value}>
-                {info.label}
-              </option>
-            ))}
-          </select>
-          <small>{CONDITION_CONFIG[form.condition_type].helper}</small>
-        </div>
+        <fieldset className="fieldset">
+          <legend>1. Choose where to watch</legend>
+          <div className="field">
+            <label htmlFor="saved-area">Saved areas</label>
+            <select
+              id="saved-area"
+              value={selectedRegionId}
+              onChange={(event) => {
+                const value = event.target.value === 'custom' ? 'custom' : Number(event.target.value);
+                setSelectedRegionId(value);
+              }}
+            >
+              <option value="custom">Drop a pin manually</option>
+              {regions.map((region) => (
+                <option key={region.id} value={region.id}>
+                  {region.name ?? 'Custom area'}
+                </option>
+              ))}
+            </select>
+            <small>Select one of your saved areas or tap the map to drop a marker.</small>
+          </div>
 
-        <div className="field">
-          <label htmlFor="condition-label">Friendly name</label>
-          <input
-            id="condition-label"
-            value={form.label}
-            onChange={(event) => updateForm({ label: event.target.value })}
-            required
+          <LocationPicker
+            latitude={form.latitude}
+            longitude={form.longitude}
+            onChange={handleLocationChange}
           />
-        </div>
 
-        <div className="field-group">
+          <div className="location-summary">
+            <div>
+              <strong>Latitude</strong>
+              <span>{form.latitude.toFixed(4)}</span>
+            </div>
+            <div>
+              <strong>Longitude</strong>
+              <span>{form.longitude.toFixed(4)}</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="fieldset">
+          <legend>2. Decide when to alert you</legend>
+          <div className="field">
+            <label htmlFor="condition-type">Alert type</label>
+            <select
+              id="condition-type"
+              value={form.condition_type}
+              onChange={(event) => handleConditionChange(event.target.value as FormState['condition_type'])}
+            >
+              {Object.entries(CONDITION_CONFIG).map(([value, info]) => (
+                <option key={value} value={value}>
+                  {info.label}
+                </option>
+              ))}
+            </select>
+            <small>{CONDITION_CONFIG[form.condition_type].helper}</small>
+          </div>
+
+          <div className="field">
+            <label htmlFor="condition-label">Friendly name</label>
+            <input
+              id="condition-label"
+              value={form.label}
+              onChange={(event) => updateForm({ label: event.target.value })}
+              required
+            />
+          </div>
+
           <div className="field">
             <label htmlFor="threshold">Notify me when it reaches</label>
             <input
@@ -224,29 +302,7 @@ const ConditionAlertsPanel = () => {
             />
             <small>{CONDITION_CONFIG[form.condition_type].unit}</small>
           </div>
-          <div className="field">
-            <label htmlFor="latitude">Latitude</label>
-            <input
-              id="latitude"
-              type="number"
-              value={form.latitude}
-              onChange={(event) => updateForm({ latitude: Number(event.target.value) })}
-              step="0.0001"
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="longitude">Longitude</label>
-            <input
-              id="longitude"
-              type="number"
-              value={form.longitude}
-              onChange={(event) => updateForm({ longitude: Number(event.target.value) })}
-              step="0.0001"
-              required
-            />
-          </div>
-        </div>
+        </fieldset>
 
         <button type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : 'Save alert'}
@@ -300,3 +356,39 @@ const ConditionAlertsPanel = () => {
 };
 
 export default ConditionAlertsPanel;
+
+function extractRegionCenter(geojson: any): LatLngLiteral | null {
+  if (!geojson) return null;
+  const geometry = geojson.type ? geojson : { type: 'Feature', geometry: geojson };
+  const type = geometry.type === 'Feature' ? geometry.geometry.type : geometry.type;
+  const coordinates = geometry.type === 'Feature' ? geometry.geometry.coordinates : geometry.coordinates;
+
+  if (!Array.isArray(coordinates)) return null;
+
+  if (type === 'MultiPolygon') {
+    const polygon = coordinates[0]?.[0];
+    if (Array.isArray(polygon) && polygon.length) {
+      const [lng, lat] = averageCoords(polygon);
+      return { lat, lng };
+    }
+  }
+
+  if (type === 'Polygon') {
+    const ring = coordinates[0];
+    if (Array.isArray(ring) && ring.length) {
+      const [lng, lat] = averageCoords(ring);
+      return { lat, lng };
+    }
+  }
+
+  return null;
+}
+
+function averageCoords(points: number[][]): [number, number] {
+  const total = points.reduce<[number, number]>((acc, [lng, lat]) => {
+    acc[0] += lng;
+    acc[1] += lat;
+    return acc;
+  }, [0, 0]);
+  return [total[0] / points.length, total[1] / points.length];
+}

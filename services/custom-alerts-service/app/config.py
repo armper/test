@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     dispatch_topic: str = Field("notify.dispatch.request.v1", env="CUSTOM_ALERTS_DISPATCH_TOPIC")
     enable_scheduler: bool = Field(False, env="CUSTOM_ALERTS_ENABLE_SCHEDULER")
     scheduler_interval_seconds: int = Field(600, env="CUSTOM_ALERTS_SCHEDULER_INTERVAL")
+    scheduler_start_max_retries: int = Field(10, env="CUSTOM_ALERTS_SCHEDULER_RETRIES")
+    scheduler_start_backoff_seconds: int = Field(5, env="CUSTOM_ALERTS_SCHEDULER_BACKOFF")
 
     class Config:
         env_file = ".env"
