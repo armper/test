@@ -45,8 +45,15 @@ export const fetchProfile = async () => {
 };
 
 export const fetchAlerts = async () => {
-  const { data } = await client.get('/alert-service/alerts');
-  return data;
+  try {
+    const { data } = await client.get('/alert-service/alerts');
+    return data;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return [];
+    }
+    throw error;
+  }
 };
 
 export const fetchRegions = async (userId: string) => {
@@ -100,6 +107,8 @@ export interface ConditionSubscriptionUpdatePayload {
   comparison?: string;
   channel_overrides?: Record<string, boolean>;
   metadata?: Record<string, unknown>;
+  latitude?: number;
+  longitude?: number;
 }
 
 export const createConditionSubscription = async (

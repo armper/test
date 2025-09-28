@@ -51,6 +51,8 @@ class ConditionSubscriptionUpdate(BaseModel):
     comparison: Optional[str] = None
     channel_overrides: Optional[Dict[str, bool]] = None
     metadata: Optional[Dict[str, Any]] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
     @validator("comparison")
     def validate_comparison(cls, value):  # type: ignore[override]
