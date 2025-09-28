@@ -98,6 +98,18 @@ services:
     ports:
       - "8003:8003"
 
+
+  custom-alerts-service:
+    build: ./services/custom-alerts-service
+    depends_on:
+      - kafka
+      - postgres
+    environment:
+      CUSTOM_ALERTS_DATABASE_URI: postgresql+psycopg2://weather:weather@postgres:5432/weather
+      CUSTOM_ALERTS_KAFKA_BOOTSTRAP: kafka:9092
+      CUSTOM_ALERTS_ENABLE_SCHEDULER: 'true'
+    ports:
+      - "8008:8008"
   notification-router-service:
     build: ./services/java/notification-router-service
     depends_on:

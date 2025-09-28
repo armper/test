@@ -51,6 +51,7 @@ Compose provisions Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, th
 - Map Service: `http://localhost:8003`
 - Alerts normalizer health probe: `http://localhost:8006/healthz`
 - Alerts matcher health probe: `http://localhost:8007/healthz`
+- Custom alerts service: `http://localhost:8008/healthz`
 - Spring Boot services: `user-service` on `8001`, `admin-service` on `8005`, `notification-router-service` on `8100`, `sms-worker-service` on `8101`
 - Frontend (nginx container): `http://localhost:3000`
   - Frontend dev server (optional): run `npm run dev` in `frontend/` for hot reload at `http://localhost:5173`
@@ -68,6 +69,7 @@ Compose provisions Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, th
 | `alerts-normalizer-svc` | FastAPI, Faust | Scheduled NOAA ingestion and alert normalization; publishes to `noaa.alerts.*` topics |
 | `alerts-matcher-svc` | FastAPI, Faust | Subscribes to normalized alerts, runs `ST_Intersects` joins against polygons, emits user matches |
 | `map-service` | FastAPI | CRUD APIs for user polygons backed by PostGIS |
+| `custom-alerts-service` | FastAPI, asyncio, Kafka | Evaluates friendly weather conditions (hot, cold, rain, wind) and produces notification dispatch events |
 | `notification-router-service` | Spring Boot | Applies user preferences, quiet hours, and severity filters before routing notifications |
 | `email-worker`, `push-worker`, `sms-worker-service` | Python, Spring Boot | Mock channel providers for email, push, and SMS with Kafka outcome mirroring |
 | `user-service` | Spring Boot | OAuth2-ready authentication, JWT issuance, RBAC, and user preference APIs |

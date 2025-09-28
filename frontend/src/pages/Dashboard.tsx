@@ -1,6 +1,7 @@
 import type { Feature } from 'geojson';
 import { useEffect, useMemo, useState } from 'react';
 import MapEditor from '../components/MapEditor';
+import ConditionAlertsPanel from '../components/ConditionAlertsPanel';
 import { useAuth } from '../context/AuthContext';
 import { createRegion, fetchAlerts, fetchRegions, listCities } from '../services/api';
 
@@ -94,6 +95,8 @@ const Dashboard = () => {
           ))}
         </ul>
       </section>
+
+      <ConditionAlertsPanel />
 
       <section>
         <h2>Suggested Cities</h2>

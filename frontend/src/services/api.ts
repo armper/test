@@ -54,6 +54,86 @@ export const fetchRegions = async (userId: string) => {
   return data;
 };
 
+export interface ConditionSubscription {
+  id: number;
+  user_id: string;
+  label: string;
+  condition_type: 'temperature_hot' | 'temperature_cold' | 'precipitation' | 'wind';
+  threshold_value: number;
+  threshold_unit: string;
+  comparison: string;
+  latitude: number;
+  longitude: number;
+  radius_km?: number | null;
+  channel_overrides: Record<string, boolean>;
+  metadata?: Record<string, unknown> | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  last_triggered_at?: string | null;
+}
+
+export const listConditionSubscriptions = async (userId: string) => {
+  const { data } = await client.get<ConditionSubscription[]>(
+    `/custom-alerts/api/v1/conditions/subscriptions/${userId}`,
+  );
+  return data;
+};
+
+export interface ConditionSubscriptionCreatePayload {
+  user_id: string;
+  label?: string;
+  condition_type: ConditionSubscription['condition_type'];
+  latitude: number;
+  longitude: number;
+  threshold_value?: number;
+  threshold_unit?: string;
+  comparison?: string;
+  channel_overrides?: Record<string, boolean>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConditionSubscriptionUpdatePayload {
+  label?: string;
+  threshold_value?: number;
+  threshold_unit?: string;
+  comparison?: string;
+  channel_overrides?: Record<string, boolean>;
+  metadata?: Record<string, unknown>;
+}
+
+export const createConditionSubscription = async (
+  payload: ConditionSubscriptionCreatePayload,
+) => {
+  const { data } = await client.post<ConditionSubscription>(
+    '/custom-alerts/api/v1/conditions/subscriptions',
+    payload,
+  );
+  return data;
+};
+
+export const updateConditionSubscription = async (
+  id: number,
+  payload: ConditionSubscriptionUpdatePayload,
+) => {
+  const { data } = await client.put<ConditionSubscription>(
+    `/custom-alerts/api/v1/conditions/subscriptions/${id}`,
+    payload,
+  );
+  return data;
+};
+
+export const deleteConditionSubscription = async (id: number) => {
+  await client.delete(`/custom-alerts/api/v1/conditions/subscriptions/${id}`);
+};
+
+export const runConditionEvaluation = async (dryRun = true) => {
+  const { data } = await client.post<{ triggered: number }>(
+    `/custom-alerts/api/v1/conditions/run?dry_run=${dryRun ? 'true' : 'false'}`,
+  );
+  return data;
+};
+
 export const fetchAdminSummary = async () => {
   const { data } = await client.get('/admin-service/summary');
   return data;

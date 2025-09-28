@@ -13,6 +13,7 @@ Hybrid Python + Spring Boot platform for ingesting NOAA weather alerts, running 
 - [Service Reference](services.md)
 - [Data & Schemas](data-and-schemas.md)
 - [API Specs](api/index.md)
+- [Custom Condition Alerts](custom-condition-alerts.md)
 
 ## What you get
 - **Ingestion pipeline:** `alerts-normalizer-svc` fetches NOAA alerts, normalizes them, and publishes Avro messages to Kafka.
