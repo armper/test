@@ -40,7 +40,7 @@ export const register = async (payload: { email: string; password: string }) => 
 };
 
 export const fetchProfile = async () => {
-  const { data } = await client.get<UserProfile>('/user-service/users/me');
+  const { data } = await client.get<UserProfile>('/user-service/api/v1/users/me');
   return data;
 };
 

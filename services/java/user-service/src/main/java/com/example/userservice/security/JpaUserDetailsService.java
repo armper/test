@@ -7,6 +7,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 @Service
 public class JpaUserDetailsService implements UserDetailsService {
@@ -23,7 +24,7 @@ public class JpaUserDetailsService implements UserDetailsService {
             .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         var authorities = account.getRoles().stream()
-            .map(role -> "ROLE_" + role.toUpperCase())
+            .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
             .collect(Collectors.toSet());
 
         return User.withUsername(account.getEmail())

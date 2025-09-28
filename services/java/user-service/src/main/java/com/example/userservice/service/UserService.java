@@ -28,4 +28,9 @@ public class UserService {
         account.setRoles(roles);
         return repository.save(account);
     }
+
+    public UserAccount getByEmail(String email) {
+        return repository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    }
 }
