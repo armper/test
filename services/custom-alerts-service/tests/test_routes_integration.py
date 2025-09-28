@@ -1,0 +1,97 @@
+from datetime import datetime
+
+import pytest
+
+from app.models import ConditionAlert, UserPreference
+from app.weather import NoaaWeatherClient
+
+
+@pytest.fixture(autouse=True)
+def _freeze_weather(monkeypatch):
+    async def fake_fetch(self, latitude, longitude):  # type: ignore[override]
+        return [
+            {
+                "startTime": "2024-04-01T12:00:00+00:00",
+                "temperature": 90,
+                "temperatureUnit": "F",
+                "shortForecast": "Sunny",
+                "probabilityOfPrecipitation": {"value": 10},
+                "windSpeed": "10 mph",
+            }
+        ]
+
+    async def fake_close(self):  # type: ignore[override]
+        return None
+
+    monkeypatch.setattr(NoaaWeatherClient, "fetch_hourly_forecast", fake_fetch)
+    monkeypatch.setattr(NoaaWeatherClient, "aclose", fake_close)
+
+
+def create_alert(client):
+    payload = {
+        "user_id": "user-123",
+        "label": "Test alert",
+        "condition_type": "temperature_hot",
+        "latitude": 40.0,
+        "longitude": -75.0,
+    }
+    response = client.post("/api/v1/conditions/subscriptions", json=payload)
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_run_endpoint_updates_last_triggered(client, session_local):
+    created = create_alert(client)
+
+    run_response = client.post("/api/v1/conditions/run?dry_run=true")
+    assert run_response.status_code == 200
+    assert run_response.json() == {"triggered": 1}
+
+    session = session_local()
+    try:
+        alert = session.get(ConditionAlert, created["id"])
+        assert alert is not None
+        assert alert.last_triggered_at is not None
+        assert isinstance(alert.last_triggered_at, datetime)
+    finally:
+        session.close()
+
+
+def test_run_endpoint_merges_channel_overrides(client, session_local, monkeypatch):
+    session = session_local()
+    pref = UserPreference(user_id="user-override", channels={"email": True})
+    session.add(pref)
+    session.commit()
+    session.close()
+
+    payload = {
+        "user_id": "user-override",
+        "label": "Wind warning",
+        "condition_type": "wind",
+        "threshold_value": 10,
+        "latitude": 45.0,
+        "longitude": -93.0,
+        "channel_overrides": {"sms": True},
+    }
+    response = client.post("/api/v1/conditions/subscriptions", json=payload)
+    assert response.status_code == 201
+
+    recorded = []
+
+    class Recorder:
+        def __init__(self) -> None:
+            self.messages = recorded
+
+        async def send(self, payload):  # type: ignore[override]
+            recorded.append(payload)
+
+    monkeypatch.setattr("app.routes._DryRunDispatcher", Recorder)
+
+    run_response = client.post("/api/v1/conditions/run?dry_run=true")
+    assert run_response.status_code == 200
+    assert run_response.json()["triggered"] == 1
+
+    assert recorded, "Expected dry-run dispatcher to capture at least one message"
+    channels = recorded[0]["user_preferences"]["channels"]
+    assert channels["email"] is True
+    assert channels["sms"] is True
