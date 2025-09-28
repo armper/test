@@ -28,13 +28,9 @@ export const setAuthToken = (token?: string) => {
 };
 
 export const login = async (email: string, password: string) => {
-  const params = new URLSearchParams();
-  params.append('username', email);
-  params.append('password', password);
-  params.append('grant_type', 'password');
-
-  const { data } = await client.post<LoginResponse>('/user-service/api/v1/auth/token', params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  const { data } = await client.post<LoginResponse>('/user-service/api/v1/auth/login', {
+    email,
+    password,
   });
   return data;
 };

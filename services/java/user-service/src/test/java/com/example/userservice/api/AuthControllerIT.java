@@ -24,11 +24,17 @@ class AuthControllerIT {
     private ObjectMapper objectMapper;
 
     @Test
-    void registerEndpointCreatesUser() throws Exception {
+    void registerAndLoginFlow() throws Exception {
         var payload = new AuthController.RegisterRequest("integration@example.com", "passw0rd");
         mockMvc.perform(post("/api/v1/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsBytes(payload)))
+            .andExpect(status().isCreated());
+
+        var loginPayload = new AuthController.LoginRequest("integration@example.com", "passw0rd");
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(loginPayload)))
             .andExpect(status().isOk());
     }
 }

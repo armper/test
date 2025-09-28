@@ -58,6 +58,7 @@ Compose provisions Kafka, Schema Registry, Kafka UI, Postgres/PostGIS, Redis, th
 
 ### Authentication quick start
 - Register an end-user: `POST http://localhost:8001/api/v1/auth/register` with body `{"email":"demo@example.com","password":"passw0rd"}`.
+- Obtain a token: `POST http://localhost:8001/api/v1/auth/login` with the same credentials to receive `{ "access_token": "..." }`.
 - Admin dashboard uses HTTP basic auth: `admin / admin123` at `http://localhost:8005/`.
 - Frontend registration UI: `http://localhost:3000/register` (login at `http://localhost:3000/login`).
 
