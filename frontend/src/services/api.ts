@@ -33,10 +33,14 @@ export const login = async (email: string, password: string) => {
   params.append('password', password);
   params.append('grant_type', 'password');
 
-  const { data } = await client.post<LoginResponse>('/user-service/auth/token', params, {
+  const { data } = await client.post<LoginResponse>('/user-service/api/v1/auth/token', params, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   return data;
+};
+
+export const register = async (payload: { email: string; password: string }) => {
+  await client.post('/user-service/api/v1/auth/register', payload);
 };
 
 export const fetchProfile = async () => {

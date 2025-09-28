@@ -44,4 +44,14 @@ describe('App routing', () => {
 
     expect(screen.getByText(/Admin Overview/i)).toBeInTheDocument();
   });
+
+  it('renders registration page', () => {
+    render(
+      <MemoryRouter initialEntries={['/register']}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { name: /Create Account/i })).toBeInTheDocument();
+  });
 });

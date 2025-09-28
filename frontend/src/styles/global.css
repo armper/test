@@ -94,6 +94,10 @@ body {
   color: #f87171;
 }
 
+.success {
+  color: #34d399;
+}
+
 .pill-list {
   display: flex;
   flex-wrap: wrap;
