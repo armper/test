@@ -8,7 +8,14 @@ const Toaster = () => {
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast toast-${toast.tone}`}>
           <span>{toast.text}</span>
-          <button type="button" onClick={() => dismissToast(toast.id)}>×</button>
+          <div className="toast-actions">
+            {toast.actions?.map((action) => (
+              <button key={action.label} type="button" onClick={() => action.onClick()}>
+                {action.label}
+              </button>
+            ))}
+            <button type="button" onClick={() => dismissToast(toast.id)}>×</button>
+          </div>
         </div>
       ))}
     </div>

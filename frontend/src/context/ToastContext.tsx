@@ -4,11 +4,13 @@ interface ToastMessage {
   id: number;
   text: string;
   tone: 'success' | 'error' | 'info';
+  actions?: { label: string; onClick: () => void }[];
+  persistent?: boolean;
 }
 
 interface ToastContextValue {
   toasts: ToastMessage[];
-  showToast: (text: string, tone?: ToastMessage['tone']) => void;
+  showToast: (text: string, tone?: ToastMessage['tone'], options?: Partial<ToastMessage>) => void;
   dismissToast: (id: number) => void;
 }
 
@@ -22,13 +24,22 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const value = useMemo<ToastContextValue>(
     () => ({
       toasts,
-      showToast: (text, tone = 'info') => {
+      showToast: (text, tone = 'info', options?: Partial<ToastMessage>) => {
         toastId += 1;
         const id = toastId;
-        setToasts((prev) => [...prev, { id, text, tone }]);
-        setTimeout(() => {
-          setToasts((prev) => prev.filter((toast) => toast.id !== id));
-        }, 4000);
+        const toast: ToastMessage = {
+          id,
+          text,
+          tone,
+          actions: options?.actions,
+          persistent: options?.persistent,
+        };
+        setToasts((prev) => [...prev, toast]);
+        if (!toast.persistent) {
+          setTimeout(() => {
+            setToasts((prev) => prev.filter((entry) => entry.id !== id));
+          }, 4000);
+        }
       },
       dismissToast: (id) => setToasts((prev) => prev.filter((toast) => toast.id !== id)),
     }),

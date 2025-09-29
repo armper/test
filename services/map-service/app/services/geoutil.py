@@ -12,7 +12,13 @@ def _extract_geometry(geojson: Dict[str, Any]) -> Dict[str, Any]:
 
 def geojson_to_geometry(geojson: Dict[str, Any], srid: int = 4326):
     geometry = _extract_geometry(geojson)
-    return from_shape(shape(geometry), srid=srid)
+    shapely_geom = shape(geometry)
+    if shapely_geom.geom_type == 'Polygon':
+        shapely_geom = shapely_geom.buffer(0)  # fix winding
+        shapely_geom = shapely_geom if shapely_geom.geom_type != 'Polygon' else shapely_geom
+        from shapely.geometry import MultiPolygon
+        shapely_geom = MultiPolygon([shapely_geom])
+    return from_shape(shapely_geom, srid=srid)
 
 
 def geometry_to_geojson(geometry) -> Dict[str, Any]:
