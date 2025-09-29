@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
+import { GeoJSON, MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
 import type { LatLngLiteral } from 'leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -16,6 +16,7 @@ interface LocationPickerProps {
   latitude: number;
   longitude: number;
   onChange: (coords: LatLngLiteral) => void;
+  highlight?: any;
 }
 
 const MapClickHandler = ({ onClick }: { onClick: (coords: LatLngLiteral) => void }) => {
@@ -40,7 +41,7 @@ const MarkerHandler = memo(({ position, onDrag }: { position: LatLngLiteral; onD
 
 MarkerHandler.displayName = 'MarkerHandler';
 
-const LocationPicker = ({ latitude, longitude, onChange }: LocationPickerProps) => {
+const LocationPicker = ({ latitude, longitude, onChange, highlight }: LocationPickerProps) => {
   const [center, setCenter] = useState<LatLngLiteral>({ lat: latitude, lng: longitude });
 
   useEffect(() => {
@@ -66,6 +67,12 @@ const LocationPicker = ({ latitude, longitude, onChange }: LocationPickerProps) 
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      {highlight ? (
+        <GeoJSON
+          data={highlight}
+          style={{ color: '#38bdf8', weight: 2, fillOpacity: 0.1 }}
+        />
+      ) : null}
       <MarkerHandler position={center} onDrag={handleSelect} />
       <MapClickHandler onClick={handleSelect} />
     </MapContainer>

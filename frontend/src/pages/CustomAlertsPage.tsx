@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   ConditionSubscription,
   deleteConditionSubscription,
@@ -21,6 +22,7 @@ interface AlertItem {
 
 const CustomAlertsPage = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [noaaAlerts, setNoaaAlerts] = useState<AlertItem[]>([]);
   const [customAlerts, setCustomAlerts] = useState<ConditionSubscription[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
@@ -28,6 +30,12 @@ const CustomAlertsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAlert, setEditingAlert] = useState<ConditionSubscription | undefined>(undefined);
+  const recentActivity = useMemo(() => {
+    return customAlerts
+      .filter((alert) => alert.last_triggered_at)
+      .sort((a, b) => (new Date(b.last_triggered_at ?? 0).getTime() - new Date(a.last_triggered_at ?? 0).getTime()))
+      .slice(0, 5);
+  }, [customAlerts]);
   const initialLocation = useMemo(() => {
     const fallback = { lat: 40.7128, lng: -74.006 };
     const defaults = user?.default_location as { lat?: number; lng?: number } | undefined;
@@ -60,12 +68,15 @@ const CustomAlertsPage = () => {
       .finally(() => setLoading(false));
   }, [user]);
 
-  const refreshCustomAlerts = async () => {
+  const refreshCustomAlerts = async (message?: string) => {
     if (!user) return;
     const alerts = await listConditionSubscriptions(user.id.toString());
     setCustomAlerts(alerts);
     setModalOpen(false);
     setEditingAlert(undefined);
+    if (message) {
+      showToast(message, 'success');
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -75,10 +86,11 @@ const CustomAlertsPage = () => {
     }
     try {
       await deleteConditionSubscription(id);
-      await refreshCustomAlerts();
+      await refreshCustomAlerts('Custom alert removed.');
     } catch (err) {
       console.error(err);
       setError('Unable to remove that alert right now.');
+      showToast('Unable to remove that alert right now.', 'error');
     }
   };
 
@@ -177,7 +189,7 @@ const CustomAlertsPage = () => {
             initialLocation={initialLocation}
             regions={regions}
             alert={editingAlert}
-            onSaved={refreshCustomAlerts}
+            onSaved={() => refreshCustomAlerts(editingAlert ? 'Custom alert updated.' : 'Custom alert saved.')}
             onCancel={() => {
               setModalOpen(false);
               setEditingAlert(undefined);

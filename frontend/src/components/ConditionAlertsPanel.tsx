@@ -9,6 +9,7 @@ import {
   updateConditionSubscription,
 } from '../services/api';
 import LocationPicker from './LocationPicker';
+import { useToast } from '../context/ToastContext';
 
 const CONDITION_CONFIG: Record<ConditionSubscription['condition_type'], {
   label: string;
@@ -101,6 +102,7 @@ const CustomAlertForm = ({
   const [form, setForm] = useState<FormState>(defaults);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const config = CONDITION_CONFIG[form.condition_type];
 
@@ -161,10 +163,13 @@ const CustomAlertForm = ({
     } catch (err) {
       console.error(err);
       setError('We could not save that alert. Please try again.');
+      showToast('Saving the alert failed. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const selectedRegion = form.selectedRegionId === 'custom' ? undefined : regions.find((item) => item.id === form.selectedRegionId);
 
   return (
     <form className="condition-form" onSubmit={handleSubmit}>
@@ -183,7 +188,12 @@ const CustomAlertForm = ({
           <small>Select one of your saved areas or tap the map below to drop a marker.</small>
         </div>
 
-        <LocationPicker latitude={form.latitude} longitude={form.longitude} onChange={handleLocationChange} />
+        <LocationPicker
+          latitude={form.latitude}
+          longitude={form.longitude}
+          onChange={handleLocationChange}
+          highlight={selectedRegion?.area_geojson}
+        />
 
         <div className="location-summary">
           <div>
