@@ -95,3 +95,33 @@ def test_run_endpoint_merges_channel_overrides(client, session_local, monkeypatc
     channels = recorded[0]["user_preferences"]["channels"]
     assert channels["email"] is True
     assert channels["sms"] is True
+
+
+def test_forecast_preview_returns_periods(client, monkeypatch):
+    async def fake_preview(self, latitude, longitude, periods):
+        return [
+            {
+                "start_time": "2024-04-01T12:00:00+00:00",
+                "short_forecast": "Sunny",
+                "temperature": 72,
+                "temperature_unit": "F",
+            }
+        ]
+
+    monkeypatch.setattr(
+        "app.weather.NoaaWeatherClient.fetch_forecast_preview",
+        fake_preview,
+    )
+
+    async def fake_close(self):
+        return None
+
+    monkeypatch.setattr(
+        "app.weather.NoaaWeatherClient.aclose",
+        fake_close,
+    )
+    response = client.get("/api/v1/conditions/preview", params={"latitude": 40.0, "longitude": -74.0})
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["periods"]) == 1
+    assert body["periods"][0]["short_forecast"] == "Sunny"

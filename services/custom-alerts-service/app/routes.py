@@ -1,7 +1,7 @@
 import asyncio
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .dispatcher import KafkaDispatcher
@@ -13,8 +13,10 @@ from .schemas import (
     ConditionSubscriptionCreate,
     ConditionSubscriptionResponse,
     ConditionSubscriptionUpdate,
+    ForecastPreview,
     DEFAULTS,
 )
+from .weather import NoaaWeatherClient
 
 router = APIRouter(prefix="/api/v1/conditions", tags=["conditions"])
 
@@ -126,3 +128,26 @@ async def run_conditions(
     finally:
         await dispatcher.stop()
     return ConditionEvaluationResponse(triggered=0)
+
+
+@router.get("/preview", response_model=ForecastPreview)
+async def preview_forecast(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    periods: int = Query(3, ge=1, le=6),
+) -> ForecastPreview:
+    client = NoaaWeatherClient()
+    try:
+        data = await client.fetch_forecast_preview(latitude, longitude, periods)
+    finally:
+        await client.aclose()
+    formatted = [
+        {
+            "start_time": item.get("start_time"),
+            "short_forecast": item.get("short_forecast"),
+            "temperature": item.get("temperature"),
+            "temperature_unit": item.get("temperature_unit"),
+        }
+        for item in data
+    ]
+    return ForecastPreview(periods=formatted)

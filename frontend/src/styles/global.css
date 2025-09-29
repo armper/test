@@ -641,3 +641,33 @@ body {
   border-radius: 0.5rem;
   cursor: pointer;
 }
+
+.forecast-preview {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.forecast-preview header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.forecast-preview ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.forecast-preview li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}

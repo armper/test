@@ -20,7 +20,7 @@ const Dashboard = () => {
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [mutedAlerts, setMutedAlerts] = useState(() => loadMutedAlerts());
 
-  useEffect(() => {
+  const loadAlerts = () => {
     fetchAlerts()
       .then((items) => {
         const filtered = items.filter((alert) => !mutedAlerts.some((entry) => entry.id === String(alert.id)));
@@ -36,6 +36,10 @@ const Dashboard = () => {
         setAlertsError('We could not load NOAA alerts.');
         showToast('We could not load NOAA alerts.', 'error');
       });
+  };
+
+  useEffect(() => {
+    loadAlerts();
   }, [mutedAlerts, showToast]);
 
   const handleMute = (alert: AlertItem, hours = 24) => {
@@ -49,6 +53,7 @@ const Dashboard = () => {
     clearMutedAlerts();
     setMutedAlerts([]);
     showToast('Cleared muted alerts.', 'info');
+    loadAlerts();
   };
 
   return (

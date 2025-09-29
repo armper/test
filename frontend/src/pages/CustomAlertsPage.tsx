@@ -148,7 +148,11 @@ const CustomAlertsPage = () => {
         {loading && <p>Loading…</p>}
         {error && <p className="error">{error}</p>}
         <ul className="condition-list">
-          {customAlerts.map((alert) => (
+          {customAlerts.map((alert) => {
+            const metadata = (alert as any).metadata_json ?? (alert as any).metadata ?? {};
+            const cooldownMinutes = metadata.cooldown_minutes ?? 60;
+            const cooldownHours = Math.max(1, Math.round(cooldownMinutes / 60));
+            return (
             <li key={alert.id} className="condition-item">
               <div>
                 <h3>{alert.label}</h3>
@@ -156,6 +160,9 @@ const CustomAlertsPage = () => {
                   Watching {alert.latitude.toFixed(3)}, {alert.longitude.toFixed(3)} — we’ll alert when{' '}
                   <strong>{alert.condition_type.replace('_', ' ')}</strong> crosses {alert.threshold_value}{' '}
                   {alert.threshold_unit ?? ''}.
+                </p>
+                <p className="meta">
+                  Cooldown: {cooldownHours} hour{cooldownHours === 1 ? '' : 's'} between alerts
                 </p>
                 <p className="meta">
                   Comparison: {alert.comparison} · Last triggered{' '}
@@ -171,7 +178,8 @@ const CustomAlertsPage = () => {
                 </button>
               </div>
             </li>
-          ))}
+            );
+          })}
           {!loading && customAlerts.length === 0 && <li>No custom alerts yet — create your first one above.</li>}
         </ul>
       </section>

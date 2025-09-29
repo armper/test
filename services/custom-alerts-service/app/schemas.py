@@ -88,3 +88,14 @@ class ConditionSubscriptionResponse(BaseModel):
 
 class ConditionEvaluationResponse(BaseModel):
     triggered: int
+
+
+class ForecastPeriod(BaseModel):
+    start_time: datetime
+    short_forecast: str | None = None
+    temperature: float | None = None
+    temperature_unit: str | None = None
+
+
+class ForecastPreview(BaseModel):
+    periods: list[ForecastPeriod]

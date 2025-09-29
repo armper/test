@@ -33,6 +33,18 @@ class NoaaWeatherClient:
         if not isinstance(periods, list):
             raise RuntimeError("NOAA hourly forecast missing periods list")
         return periods
+    async def fetch_forecast_preview(self, latitude: float, longitude: float, periods: int = 3):
+        hourly = await self.fetch_hourly_forecast(latitude, longitude)
+        summary = []
+        for period in hourly[:periods]:
+            summary.append({
+                "start_time": period.get("startTime"),
+                "short_forecast": period.get("shortForecast"),
+                "temperature": period.get("temperature"),
+                "temperature_unit": period.get("temperatureUnit"),
+            })
+        return summary
+
 
     async def aclose(self) -> None:
         if not self._external_client:

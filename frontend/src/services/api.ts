@@ -57,7 +57,7 @@ export const fetchAlerts = async () => {
 };
 
 export const fetchRegions = async (userId: string) => {
-  const { data } = await client.get<Region[]>(`/map-service/regions/${userId}`);
+  const { data } = await client.get<Region[]>(`/map-service/api/v1/regions/${userId}`);
   return data;
 };
 
@@ -74,6 +74,7 @@ export interface ConditionSubscription {
   radius_km?: number | null;
   channel_overrides: Record<string, boolean>;
   metadata?: Record<string, unknown> | null;
+  metadata_json?: Record<string, any> | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -154,12 +155,12 @@ export const createRegion = async (payload: {
   area_geojson: any;
   properties?: Record<string, unknown>;
 }) => {
-  const { data } = await client.post('/map-service/regions', payload);
+  const { data } = await client.post('/map-service/api/v1/regions', payload);
   return data;
 };
 
 export const listCities = async () => {
-  const { data } = await client.get('/map-service/cities');
+  const { data } = await client.get('/map-service/api/v1/cities');
   return data;
 };
 

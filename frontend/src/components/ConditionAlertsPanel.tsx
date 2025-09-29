@@ -9,6 +9,7 @@ import {
   updateConditionSubscription,
 } from '../services/api';
 import LocationPicker from './LocationPicker';
+import ForecastPreview from './ForecastPreview';
 import { useToast } from '../context/ToastContext';
 
 const CONDITION_CONFIG: Record<ConditionSubscription['condition_type'], {
@@ -48,6 +49,15 @@ const CONDITION_CONFIG: Record<ConditionSubscription['condition_type'], {
   },
 };
 
+const COOLDOWN_OPTIONS = [
+  { label: 'Every time it happens', value: 0 },
+  { label: 'Wait 1 hour between alerts', value: 60 },
+  { label: 'Wait 3 hours between alerts', value: 180 },
+  { label: 'Wait 6 hours between alerts', value: 360 },
+  { label: 'Wait 12 hours between alerts', value: 720 },
+  { label: 'Wait 24 hours between alerts', value: 1440 },
+];
+
 interface CustomAlertFormProps {
   userId: string;
   initialLocation: LatLngLiteral;
@@ -65,6 +75,7 @@ interface FormState {
   latitude: number;
   longitude: number;
   selectedRegionId: number | 'custom';
+  cooldownMinutes: number;
 }
 
 const CustomAlertForm = ({
@@ -78,6 +89,7 @@ const CustomAlertForm = ({
 }: CustomAlertFormProps) => {
   const defaults = useMemo(() => {
     if (alert) {
+      const metadata = (alert as any).metadata_json ?? (alert as any).metadata ?? {};
       return {
         condition_type: alert.condition_type,
         label: alert.label,
@@ -85,17 +97,21 @@ const CustomAlertForm = ({
         latitude: alert.latitude,
         longitude: alert.longitude,
         selectedRegionId: 'custom' as const,
+        cooldownMinutes: metadata.cooldown_minutes ?? 60,
       };
     }
     const startingType: FormState['condition_type'] = 'temperature_hot';
     const config = CONDITION_CONFIG[startingType];
+    const defaultRegion = regions.length ? regions[0] : undefined;
+    const cooldown = 60;
     return {
       condition_type: startingType,
       label: config.label,
       threshold_value: config.defaultThreshold,
-      latitude: initialLocation.lat,
-      longitude: initialLocation.lng,
-      selectedRegionId: regions.length ? regions[0].id : ('custom' as const),
+      latitude: defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lat ?? initialLocation.lat : initialLocation.lat,
+      longitude: defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lng ?? initialLocation.lng : initialLocation.lng,
+      selectedRegionId: defaultRegion ? defaultRegion.id : ('custom' as const),
+      cooldownMinutes: cooldown,
     };
   }, [alert, initialLocation.lat, initialLocation.lng, regions]);
 
@@ -137,13 +153,14 @@ const CustomAlertForm = ({
     setError(null);
 
     try {
+      const metadata = form.cooldownMinutes > 0 ? { cooldown_minutes: form.cooldownMinutes } : undefined;
       if (alert) {
         const payload: ConditionSubscriptionUpdatePayload = {
           label: form.label,
           threshold_value: form.threshold_value,
           threshold_unit: alert.threshold_unit,
           comparison: alert.comparison,
-          metadata: alert.metadata ?? undefined,
+          metadata,
           latitude: form.latitude,
           longitude: form.longitude,
         };
@@ -156,6 +173,7 @@ const CustomAlertForm = ({
           threshold_value: form.threshold_value,
           latitude: form.latitude,
           longitude: form.longitude,
+          metadata,
         };
         await createConditionSubscription(payload);
       }
@@ -194,6 +212,8 @@ const CustomAlertForm = ({
           onChange={handleLocationChange}
           highlight={selectedRegion?.area_geojson}
         />
+
+        <ForecastPreview latitude={form.latitude} longitude={form.longitude} />
 
         <div className="location-summary">
           <div>
@@ -247,6 +267,20 @@ const CustomAlertForm = ({
             max={200}
           />
           <small>{config.unit}</small>
+        </div>
+        <div className="field">
+          <label htmlFor="cooldown">Remind me again after</label>
+          <select
+            id="cooldown"
+            value={form.cooldownMinutes}
+            onChange={(event) => updateForm({ cooldownMinutes: Number(event.target.value) })}
+          >
+            {COOLDOWN_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </fieldset>
 

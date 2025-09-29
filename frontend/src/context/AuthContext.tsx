@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { AxiosError } from 'axios';
 import { fetchProfile, login as loginRequest, setAuthToken, UserProfile } from '../services/api';
 
 interface AuthContextValue {
@@ -13,17 +14,37 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'));
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    const raw = localStorage.getItem('currentUser');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as UserProfile;
+    } catch (error) {
+      console.warn('Failed to parse stored user', error);
+      return null;
+    }
+  });
 
   useEffect(() => {
     if (token) {
       setAuthToken(token);
       fetchProfile()
-        .then(setUser)
-        .catch(() => logout());
+        .then((profile) => {
+          setUser(profile);
+          localStorage.setItem('currentUser', JSON.stringify(profile));
+        })
+        .catch((error: AxiosError | Error) => {
+          const status = 'response' in error ? error.response?.status : undefined;
+          if (status === 401) {
+            logout();
+          } else {
+            console.error('Failed to refresh profile', error);
+          }
+        });
     } else {
       setAuthToken(undefined);
       setUser(null);
+      localStorage.removeItem('currentUser');
     }
   }, [token]);
 
@@ -35,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = () => {
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('currentUser');
     setToken(null);
     setUser(null);
   };

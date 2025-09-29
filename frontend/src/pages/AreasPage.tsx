@@ -51,6 +51,20 @@ const AreasPage = () => {
     }
   };
 
+
+  const handleExportRegions = () => {
+    if (!regions.length) {
+      return;
+    }
+    const blob = new Blob([JSON.stringify(regions, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `weather-areas-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="page-section">
       <div className="section-header">
@@ -58,6 +72,9 @@ const AreasPage = () => {
           <h2>My Coverage Areas</h2>
           <p>Draw the neighborhoods, cities, or travel paths you care about most.</p>
         </div>
+        <button type="button" className="action secondary" onClick={handleExportRegions} disabled={!regions.length}>
+          Download GeoJSON
+        </button>
       </div>
 
       <div className="card">
