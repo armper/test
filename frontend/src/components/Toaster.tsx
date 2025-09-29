@@ -10,7 +10,7 @@ const Toaster = () => {
           <span>{toast.text}</span>
           <div className="toast-actions">
             {toast.actions?.map((action) => (
-              <button key={action.label} type="button" onClick={() => action.onClick()}>
+              <button key={action.label} type="button" onClick={action.onClick}>
                 {action.label}
               </button>
             ))}
