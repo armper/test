@@ -83,7 +83,6 @@ const CustomAlertsPage = () => {
     if (!user) return;
 
     let toastId = 0;
-
     const actions = [
       {
         label: 'Cancel',

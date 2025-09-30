@@ -1,6 +1,7 @@
 import type { Feature } from 'geojson';
 import { useEffect, useMemo, useState } from 'react';
 import MapEditor from '../components/MapEditor';
+import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -20,6 +21,10 @@ const AreasPage = () => {
   const [regions, setRegions] = useState<Region[]>([]);
   const [cities, setCities] = useState<any[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+  const [editingRegion, setEditingRegion] = useState<Region | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [confirmDeleteRegion, setConfirmDeleteRegion] = useState<Region | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -46,7 +51,7 @@ const AreasPage = () => {
     if (!user) return;
     setStatus('Saving…');
     try {
-      await createRegion({
+      const created = await createRegion({
         user_id: user.id.toString(),
         name: 'My Area',
         area_geojson: feature.geometry,
@@ -56,6 +61,13 @@ const AreasPage = () => {
       setRegions(updated);
       setStatus('Region saved!');
       showToast('Area saved successfully.', 'success');
+      const match = updated.find((region) => region.id === created.id);
+      if (match) {
+        setEditingRegion(match);
+        const props = (match.properties ?? {}) as Record<string, unknown>;
+        setEditName(match.name ?? '');
+        setEditDescription((props.description as string) ?? '');
+      }
     } catch (error) {
       console.error(error);
       setStatus('Failed to save region.');
@@ -105,10 +117,10 @@ const AreasPage = () => {
               <li key={region.id}>
                 <strong>{region.name ?? 'Custom area'}</strong>
                 <span>{properties.description ?? 'GeoJSON polygon'}</span>
-                <div className="item-actions">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
+               <div className="item-actions">
+                 <label className="toggle">
+                   <input
+                     type="checkbox"
                       checked={receiveAlerts}
                       onChange={async (event) => {
                         const next = event.target.checked;
@@ -134,19 +146,22 @@ const AreasPage = () => {
                       }}
                     />
                     <span>{receiveAlerts ? 'Receiving alerts' : 'Muted'}</span>
-                  </label>
+                 </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingRegion(region);
+                      setEditName(region.name ?? '');
+                      setEditDescription((properties.description as string) ?? '');
+                    }}
+                  >
+                    Edit
+                  </button>
                   <button
                     type="button"
                     className="destructive"
                     onClick={async () => {
-                      try {
-                        await deleteRegion(region.id);
-                        setRegions((prev) => prev.filter((item) => item.id !== region.id));
-                        showToast('Area removed.', 'success');
-                      } catch (err) {
-                        console.error(err);
-                        showToast('Unable to remove area.', 'error');
-                      }
+                      setConfirmDeleteRegion(region);
                     }}
                   >
                     Delete
@@ -169,6 +184,95 @@ const AreasPage = () => {
           ))}
         </div>
       </section>
+
+      {editingRegion && (
+        <Modal
+          title={`Edit ${editingRegion.name ?? 'area'}`}
+          onClose={() => setEditingRegion(null)}
+        >
+          <form
+            className="condition-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              try {
+                await updateRegion(editingRegion.id, {
+                  name: editName,
+                  properties: {
+                    ...(editingRegion.properties ?? {}),
+                    description: editDescription,
+                  },
+                });
+                const refreshed = await fetchRegions(user!.id.toString());
+                setRegions(refreshed);
+                showToast('Area updated.', 'success');
+                setEditingRegion(null);
+              } catch (err) {
+                console.error(err);
+                showToast('Unable to update area.', 'error');
+              }
+            }}
+          >
+            <div className="field">
+              <label htmlFor="area-name">Name</label>
+              <input
+                id="area-name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                placeholder="My favorite neighborhood"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="area-description">Description (optional)</label>
+              <textarea
+                id="area-description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="form-actions">
+              <button type="button" className="action secondary" onClick={() => setEditingRegion(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="action">
+                Save changes
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {confirmDeleteRegion && (
+        <Modal title="Delete area" onClose={() => setConfirmDeleteRegion(null)}>
+          <p>
+            Are you sure you want to delete{' '}
+            <strong>{confirmDeleteRegion.name ?? 'this area'}</strong>? This action cannot be undone.
+          </p>
+          <div className="form-actions">
+            <button type="button" className="action secondary" onClick={() => setConfirmDeleteRegion(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="action destructive"
+              onClick={async () => {
+                try {
+                  await deleteRegion(confirmDeleteRegion.id);
+                  setRegions((prev) => prev.filter((item) => item.id !== confirmDeleteRegion.id));
+                  showToast('Area removed.', 'success');
+                } catch (err) {
+                  console.error(err);
+                  showToast('Unable to remove area.', 'error');
+                } finally {
+                  setConfirmDeleteRegion(null);
+                }
+              }}
+            >
+              Delete area
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
