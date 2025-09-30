@@ -159,6 +159,18 @@ export const createRegion = async (payload: {
   return data;
 };
 
+export const updateRegion = async (id: number, payload: {
+  name?: string;
+  properties?: Record<string, unknown>;
+}) => {
+  const { data } = await client.patch(`/map-service/api/v1/regions/${id}`, payload);
+  return data;
+};
+
+export const deleteRegion = async (id: number) => {
+  await client.delete(`/map-service/api/v1/regions/${id}`);
+};
+
 export const listCities = async () => {
   const { data } = await client.get('/map-service/api/v1/cities');
   return data;

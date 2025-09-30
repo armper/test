@@ -2,12 +2,21 @@ import type { Feature } from 'geojson';
 import { useEffect, useMemo, useState } from 'react';
 import MapEditor from '../components/MapEditor';
 import { useAuth } from '../context/AuthContext';
-import { createRegion, fetchRegions, listCities, type Region } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import {
+  createRegion,
+  deleteRegion,
+  fetchRegions,
+  listCities,
+  updateRegion,
+  type Region,
+} from '../services/api';
 
 const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
 
 const AreasPage = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [regions, setRegions] = useState<Region[]>([]);
   const [cities, setCities] = useState<any[]>([]);
   const [status, setStatus] = useState<string | null>(null);
@@ -41,13 +50,16 @@ const AreasPage = () => {
         user_id: user.id.toString(),
         name: 'My Area',
         area_geojson: feature.geometry,
+        properties: { receive_alerts: true },
       });
       const updated = await fetchRegions(user.id.toString());
       setRegions(updated);
       setStatus('Region saved!');
+      showToast('Area saved successfully.', 'success');
     } catch (error) {
       console.error(error);
       setStatus('Failed to save region.');
+      showToast('Failed to save region.', 'error');
     }
   };
 
@@ -79,18 +91,70 @@ const AreasPage = () => {
 
       <div className="card">
         <MapEditor center={mapCenter} onSave={handleSaveRegion} />
+        <p className="helper">Draw an area on the map, then click save to capture it.</p>
         {status && <p className="status-message">{status}</p>}
       </div>
 
       <section className="card">
         <h3>Saved Areas</h3>
         <ul className="simple-list">
-          {regions.map((region) => (
-            <li key={region.id}>
-              <strong>{region.name ?? 'Custom area'}</strong>
-              <span>{region.properties?.description ?? 'GeoJSON polygon'}</span>
-            </li>
-          ))}
+          {regions.map((region) => {
+            const properties = (region.properties ?? {}) as Record<string, unknown>;
+            const receiveAlerts = properties.receive_alerts !== false;
+            return (
+              <li key={region.id}>
+                <strong>{region.name ?? 'Custom area'}</strong>
+                <span>{properties.description ?? 'GeoJSON polygon'}</span>
+                <div className="item-actions">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={receiveAlerts}
+                      onChange={async (event) => {
+                        const next = event.target.checked;
+                        try {
+                          await updateRegion(region.id, {
+                            properties: {
+                              ...properties,
+                              receive_alerts: next,
+                            },
+                          });
+                          setRegions((prev) =>
+                            prev.map((item) =>
+                              item.id === region.id
+                                ? { ...item, properties: { ...properties, receive_alerts: next } }
+                                : item
+                            )
+                          );
+                          showToast(next ? 'Alerts enabled for this area.' : 'Alerts disabled for this area.', 'info');
+                        } catch (err) {
+                          console.error(err);
+                          showToast('Unable to update area alerts.', 'error');
+                        }
+                      }}
+                    />
+                    <span>{receiveAlerts ? 'Receiving alerts' : 'Muted'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="destructive"
+                    onClick={async () => {
+                      try {
+                        await deleteRegion(region.id);
+                        setRegions((prev) => prev.filter((item) => item.id !== region.id));
+                        showToast('Area removed.', 'success');
+                      } catch (err) {
+                        console.error(err);
+                        showToast('Unable to remove area.', 'error');
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            );
+          })}
           {regions.length === 0 && <li>No areas yet — draw a shape on the map and save it.</li>}
         </ul>
       </section>

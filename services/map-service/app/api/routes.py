@@ -10,7 +10,7 @@ from ..core.config import settings
 from ..db.base import Base
 from ..db.session import engine
 from ..models.region import Region
-from ..schemas import RegionCreate, RegionResponse
+from ..schemas import RegionCreate, RegionResponse, RegionUpdate
 from ..services.geoutil import geojson_to_geometry, geometry_to_geojson
 
 router = APIRouter()
@@ -70,3 +70,34 @@ def list_regions(user_id: str, db: Session = Depends(deps.get_db_session)) -> Li
             )
         )
     return payload
+
+
+@router.patch("/regions/{region_id}", response_model=RegionResponse)
+def update_region(region_id: int, payload: RegionUpdate, db: Session = Depends(deps.get_db_session)) -> RegionResponse:
+    record = db.get(Region, region_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Region not found")
+    if payload.name is not None:
+        record.name = payload.name
+    if payload.properties is not None:
+        record.properties = payload.properties
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return RegionResponse(
+        id=record.id,
+        user_id=record.user_id,
+        name=record.name,
+        area_geojson=geometry_to_geojson(record.area),
+        properties=record.properties,
+        created_at=record.created_at,
+    )
+
+
+@router.delete("/regions/{region_id}", status_code=204)
+def delete_region(region_id: int, db: Session = Depends(deps.get_db_session)) -> None:
+    record = db.get(Region, region_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Region not found")
+    db.delete(record)
+    db.commit()

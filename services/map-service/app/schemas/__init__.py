@@ -1,3 +1,3 @@
-from .region import RegionCreate, RegionResponse
+from .region import RegionCreate, RegionResponse, RegionUpdate
 
-__all__ = ["RegionCreate", "RegionResponse"]
+__all__ = ["RegionCreate", "RegionResponse", "RegionUpdate"]

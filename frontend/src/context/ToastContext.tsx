@@ -10,7 +10,7 @@ interface ToastMessage {
 
 interface ToastContextValue {
   toasts: ToastMessage[];
-  showToast: (text: string, tone?: ToastMessage['tone'], options?: Partial<ToastMessage>) => void;
+  showToast: (text: string, tone?: ToastMessage['tone'], options?: Partial<ToastMessage>) => number;
   dismissToast: (id: number) => void;
 }
 
@@ -40,6 +40,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setToasts((prev) => prev.filter((entry) => entry.id !== id));
           }, 4000);
         }
+        return id;
       },
       dismissToast: (id) => setToasts((prev) => prev.filter((toast) => toast.id !== id)),
     }),

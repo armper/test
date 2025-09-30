@@ -21,3 +21,9 @@ class RegionResponse(RegionBase):
 
     class Config:
         orm_mode = True
+
+
+
+class RegionUpdate(BaseModel):
+    name: Optional[str] = None
+    properties: Optional[Dict[str, Any]] = None

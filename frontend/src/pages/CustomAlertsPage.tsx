@@ -22,7 +22,7 @@ interface AlertItem {
 
 const CustomAlertsPage = () => {
   const { user } = useAuth();
-  const { showToast } = useToast();
+  const { showToast, dismissToast } = useToast();
   const [noaaAlerts, setNoaaAlerts] = useState<AlertItem[]>([]);
   const [customAlerts, setCustomAlerts] = useState<ConditionSubscription[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
@@ -79,19 +79,34 @@ const CustomAlertsPage = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (!user) return;
-    if (!window.confirm('Remove this custom alert?')) {
-      return;
-    }
-    try {
-      await deleteConditionSubscription(id);
-      await refreshCustomAlerts('Custom alert removed.');
-    } catch (err) {
-      console.error(err);
-      setError('Unable to remove that alert right now.');
-      showToast('Unable to remove that alert right now.', 'error');
-    }
+
+    let toastId = 0;
+
+    const actions = [
+      {
+        label: 'Cancel',
+        onClick: () => dismissToast(toastId),
+      },
+      {
+        label: 'Delete',
+        onClick: async () => {
+          try {
+            await deleteConditionSubscription(id);
+            await refreshCustomAlerts('Custom alert removed.');
+          } catch (err) {
+            console.error(err);
+            setError('Unable to remove that alert right now.');
+            showToast('Unable to remove that alert right now.', 'error');
+          } finally {
+            dismissToast(toastId);
+          }
+        },
+      },
+    ];
+
+    toastId = showToast('Remove this custom alert?', 'info', { persistent: true, actions });
   };
 
   const openCreateModal = () => {
