@@ -1,6 +1,6 @@
 import type { Feature } from 'geojson';
-import { useEffect, useRef } from 'react';
-import { FeatureGroup, MapContainer, TileLayer } from 'react-leaflet';
+import { useCallback, useEffect, useState } from 'react';
+import { FeatureGroup, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import type { FeatureGroup as LeafletFeatureGroup, LatLngExpression } from 'leaflet';
 import L from 'leaflet';
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
@@ -17,64 +17,111 @@ L.Icon.Default.mergeOptions({
 interface MapEditorProps {
   center: LatLngExpression;
   onSave: (geojson: Feature) => void;
+  initialFeature?: Feature | null;
+  showControls?: boolean;
+  height?: number;
 }
 
-const MapEditor = ({ center, onSave }: MapEditorProps) => {
-  const drawnItemsRef = useRef<LeafletFeatureGroup | null>(null);
+const MapEditor = ({ center, onSave, initialFeature = null, showControls = true, height = 400 }: MapEditorProps) => {
+  const [featureGroup, setFeatureGroup] = useState<LeafletFeatureGroup | null>(null);
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+
+  const handleFeatureGroupRef = useCallback((group: LeafletFeatureGroup | null) => {
+    setFeatureGroup(group);
+  }, []);
 
   useEffect(() => {
-    const featureGroup = drawnItemsRef.current;
-    if (!featureGroup) return;
+    if (!featureGroup || !initialFeature) {
+      return;
+    }
 
-    const map = featureGroup._map;
-    if (!map) return;
+    featureGroup.clearLayers();
+    const geoJsonLayer = L.geoJSON(initialFeature as any);
+    geoJsonLayer.eachLayer((layer) => {
+      featureGroup.addLayer(layer);
+    });
+
+    if (mapInstance) {
+      const bounds = geoJsonLayer.getBounds?.();
+      if (bounds && bounds.isValid()) {
+        mapInstance.fitBounds(bounds, { padding: [24, 24] });
+      }
+    }
+  }, [featureGroup, initialFeature, mapInstance]);
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={10}
+      style={{ height: `${height}px`, width: '100%' }}
+      whenCreated={setMapInstance}
+      whenReady={(event) => event.target.invalidateSize()}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <FeatureGroup ref={handleFeatureGroupRef as any} />
+      {featureGroup && showControls ? <DrawControls featureGroup={featureGroup} onSave={onSave} /> : null}
+    </MapContainer>
+  );
+};
+
+interface DrawControlsProps {
+  featureGroup: LeafletFeatureGroup;
+  onSave: (geojson: Feature) => void;
+}
+
+const DrawControls = ({ featureGroup, onSave }: DrawControlsProps) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || !featureGroup) return undefined;
 
     const drawControl = new L.Control.Draw({
       edit: { featureGroup },
       draw: {
+        polygon: {
+          allowIntersection: false,
+          showArea: true,
+        },
+        rectangle: true,
+        polyline: false,
         marker: false,
         circle: false,
         circlemarker: false,
-        polyline: false,
       },
     });
 
     map.addControl(drawControl);
+    map.invalidateSize();
 
-    function handleCreated(event: L.DrawEvents.Created) {
-      const layer = event.layer as L.Layer;
+    const handleCreated = (event: L.DrawEvents.Created) => {
+      const layer = event.layer as L.Layer & { toGeoJSON: () => Feature };
       featureGroup.clearLayers();
       featureGroup.addLayer(layer);
-      onSave(layer.toGeoJSON() as Feature);
-    }
+      onSave(layer.toGeoJSON());
+    };
 
-    function handleEdited() {
+    const handleEdited = () => {
       const layers = featureGroup.getLayers();
       if (layers.length) {
         const layer = layers[0] as L.Layer & { toGeoJSON: () => Feature };
         onSave(layer.toGeoJSON());
       }
-    }
+    };
 
     map.on(L.Draw.Event.CREATED, handleCreated);
     map.on(L.Draw.Event.EDITED, handleEdited);
 
     return () => {
-      map.removeControl(drawControl);
       map.off(L.Draw.Event.CREATED, handleCreated);
       map.off(L.Draw.Event.EDITED, handleEdited);
+      map.removeControl(drawControl);
     };
-  }, [onSave]);
+  }, [map, featureGroup, onSave]);
 
-  return (
-    <MapContainer center={center} zoom={10} style={{ height: '400px', width: '100%' }}>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <FeatureGroup ref={drawnItemsRef as any} />
-    </MapContainer>
-  );
+  return null;
 };
 
 export default MapEditor;

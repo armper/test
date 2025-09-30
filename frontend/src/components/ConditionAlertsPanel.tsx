@@ -1,24 +1,31 @@
+import type { Feature } from 'geojson';
 import type { FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LatLngLiteral } from 'leaflet';
+import MapEditor from './MapEditor';
+import LocationPicker from './LocationPicker';
+import ForecastPreview from './ForecastPreview';
+import { useToast } from '../context/ToastContext';
 import {
   ConditionSubscription,
   ConditionSubscriptionCreatePayload,
   ConditionSubscriptionUpdatePayload,
   createConditionSubscription,
   updateConditionSubscription,
+  createRegion,
+  type Region,
 } from '../services/api';
-import LocationPicker from './LocationPicker';
-import ForecastPreview from './ForecastPreview';
-import { useToast } from '../context/ToastContext';
 
-const CONDITION_CONFIG: Record<ConditionSubscription['condition_type'], {
-  label: string;
-  helper: string;
-  unit: string;
-  defaultThreshold: number;
-  comparison: 'above' | 'below';
-}> = {
+const CONDITION_CONFIG: Record<
+  ConditionSubscription['condition_type'],
+  {
+    label: string;
+    helper: string;
+    unit: string;
+    defaultThreshold: number;
+    comparison: 'above' | 'below';
+  }
+> = {
   temperature_hot: {
     label: "Let me know when it's really hot",
     helper: 'Great for planning outdoor time when the day heats up.',
@@ -61,10 +68,11 @@ const COOLDOWN_OPTIONS = [
 interface CustomAlertFormProps {
   userId: string;
   initialLocation: LatLngLiteral;
-  regions: { id: number; name?: string; area_geojson: any }[];
+  regions: Region[];
   alert?: ConditionSubscription;
   onSaved: () => void;
   onCancel: () => void;
+  onRegionCreated?: (region: Region) => void;
   saveLabel?: string;
 }
 
@@ -85,9 +93,10 @@ const CustomAlertForm = ({
   alert,
   onSaved,
   onCancel,
+  onRegionCreated = () => {},
   saveLabel = 'Save alert',
 }: CustomAlertFormProps) => {
-  const defaults = useMemo(() => {
+  const defaults = useMemo<FormState>(() => {
     if (alert) {
       const metadata = (alert as any).metadata_json ?? (alert as any).metadata ?? {};
       return {
@@ -96,31 +105,55 @@ const CustomAlertForm = ({
         threshold_value: alert.threshold_value,
         latitude: alert.latitude,
         longitude: alert.longitude,
-        selectedRegionId: 'custom' as const,
+        selectedRegionId: 'custom',
         cooldownMinutes: metadata.cooldown_minutes ?? 60,
       };
     }
+
     const startingType: FormState['condition_type'] = 'temperature_hot';
     const config = CONDITION_CONFIG[startingType];
-    const defaultRegion = regions.length ? regions[0] : undefined;
-    const cooldown = 60;
+    const defaultRegion = regions[0];
+    const fallbackLat = defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lat : undefined;
+    const fallbackLng = defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lng : undefined;
+
     return {
       condition_type: startingType,
       label: config.label,
       threshold_value: config.defaultThreshold,
-      latitude: defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lat ?? initialLocation.lat : initialLocation.lat,
-      longitude: defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lng ?? initialLocation.lng : initialLocation.lng,
-      selectedRegionId: defaultRegion ? defaultRegion.id : ('custom' as const),
-      cooldownMinutes: cooldown,
+      latitude: fallbackLat ?? initialLocation.lat,
+      longitude: fallbackLng ?? initialLocation.lng,
+      selectedRegionId: defaultRegion ? defaultRegion.id : 'custom',
+      cooldownMinutes: 60,
     };
   }, [alert, initialLocation.lat, initialLocation.lng, regions]);
 
   const [form, setForm] = useState<FormState>(defaults);
+  const [availableRegions, setAvailableRegions] = useState<Region[]>(regions);
+  const [isCreatingArea, setIsCreatingArea] = useState(false);
+  const [draftFeature, setDraftFeature] = useState<Feature | null>(null);
+  const [areaName, setAreaName] = useState('');
+  const [areaDescription, setAreaDescription] = useState('');
+  const [creatingRegion, setCreatingRegion] = useState(false);
+  const [areaError, setAreaError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
 
   const config = CONDITION_CONFIG[form.condition_type];
+
+  useEffect(() => {
+    setAvailableRegions(regions);
+  }, [regions]);
+
+  useEffect(() => {
+    setForm(defaults);
+    setIsCreatingArea(false);
+    setDraftFeature(null);
+    setAreaName('');
+    setAreaDescription('');
+    setAreaError(null);
+    setError(null);
+  }, [defaults]);
 
   const updateForm = (updates: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...updates }));
@@ -137,23 +170,36 @@ const CustomAlertForm = ({
 
   const handleRegionSelect = (value: string) => {
     if (value === 'custom') {
+      setIsCreatingArea(false);
+      setDraftFeature(null);
       updateForm({ selectedRegionId: 'custom' });
       return;
     }
+
     const id = Number(value);
-    const region = regions.find((item) => item.id === id);
+    const region = availableRegions.find((item) => item.id === id);
     if (!region) return;
+
     const center = extractRegionCenter(region.area_geojson) ?? { lat: form.latitude, lng: form.longitude };
+    setIsCreatingArea(false);
+    setDraftFeature(null);
     updateForm({ selectedRegionId: id, latitude: center.lat, longitude: center.lng });
   };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+
+    if (isCreatingArea) {
+      setAreaError('Finish saving the new area or cancel drawing before saving this alert.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
     try {
       const metadata = form.cooldownMinutes > 0 ? { cooldown_minutes: form.cooldownMinutes } : undefined;
+
       if (alert) {
         const payload: ConditionSubscriptionUpdatePayload = {
           label: form.label,
@@ -177,6 +223,7 @@ const CustomAlertForm = ({
         };
         await createConditionSubscription(payload);
       }
+
       onSaved();
     } catch (err) {
       console.error(err);
@@ -187,7 +234,91 @@ const CustomAlertForm = ({
     }
   };
 
-  const selectedRegion = form.selectedRegionId === 'custom' ? undefined : regions.find((item) => item.id === form.selectedRegionId);
+  const handleStartArea = () => {
+    setIsCreatingArea(true);
+    setDraftFeature(null);
+    setAreaError(null);
+  };
+
+  const handleCancelArea = () => {
+    setIsCreatingArea(false);
+    setDraftFeature(null);
+    setAreaName('');
+    setAreaDescription('');
+    setAreaError(null);
+  };
+
+  const handleDraftFeature = (feature: Feature) => {
+    if (!feature?.geometry) {
+      setAreaError('Draw a polygon to define your area.');
+      return;
+    }
+    setAreaError(null);
+    setDraftFeature(feature);
+  };
+
+  const handleSaveArea = async () => {
+    if (!draftFeature?.geometry) {
+      setAreaError('Draw a polygon to define your area before saving.');
+      return;
+    }
+
+    setCreatingRegion(true);
+    setAreaError(null);
+
+    try {
+      const trimmedName = areaName.trim();
+      const trimmedDescription = areaDescription.trim();
+      const properties: Record<string, unknown> = { receive_alerts: true };
+      if (trimmedDescription) {
+        properties.description = trimmedDescription;
+      }
+
+      const created = await createRegion({
+        user_id: userId,
+        name: trimmedName || undefined,
+        area_geojson: draftFeature.geometry,
+        properties,
+      });
+
+      setAvailableRegions((prev) => {
+        if (prev.some((region) => region.id === created.id)) {
+          return prev;
+        }
+        return [...prev, created];
+      });
+      onRegionCreated(created);
+
+      const center = extractRegionCenter(created.area_geojson) ?? {
+        lat: form.latitude,
+        lng: form.longitude,
+      };
+
+      setForm((prev) => ({
+        ...prev,
+        selectedRegionId: created.id,
+        latitude: center.lat,
+        longitude: center.lng,
+      }));
+
+      setIsCreatingArea(false);
+      setDraftFeature(null);
+      setAreaName('');
+      setAreaDescription('');
+      showToast('Area saved. You can now reuse it for alerts.', 'success');
+    } catch (err) {
+      console.error(err);
+      setAreaError('We could not save that area. Please try again.');
+      showToast('Saving the new area failed.', 'error');
+    } finally {
+      setCreatingRegion(false);
+    }
+  };
+
+  const selectedRegion =
+    form.selectedRegionId === 'custom'
+      ? undefined
+      : availableRegions.find((item) => item.id === form.selectedRegionId);
 
   return (
     <form className="condition-form" onSubmit={handleSubmit}>
@@ -195,36 +326,88 @@ const CustomAlertForm = ({
         <legend>1. Choose where to watch</legend>
         <div className="field">
           <label htmlFor="saved-area">Saved areas</label>
-          <select id="saved-area" value={form.selectedRegionId} onChange={(event) => handleRegionSelect(event.target.value)}>
+          <select
+            id="saved-area"
+            value={form.selectedRegionId}
+            onChange={(event) => handleRegionSelect(event.target.value)}
+          >
             <option value="custom">Drop a pin manually</option>
-            {regions.map((region) => (
+            {availableRegions.map((region) => (
               <option key={region.id} value={region.id}>
                 {region.name ?? 'Custom area'}
               </option>
             ))}
           </select>
           <small>Select one of your saved areas or tap the map below to drop a marker.</small>
+          <button
+            type="button"
+            onClick={isCreatingArea ? handleCancelArea : handleStartArea}
+            className="action secondary"
+          >
+            {isCreatingArea ? 'Cancel drawing' : 'Draw a new area'}
+          </button>
         </div>
 
-        <LocationPicker
-          latitude={form.latitude}
-          longitude={form.longitude}
-          onChange={handleLocationChange}
-          highlight={selectedRegion?.area_geojson}
-        />
+        {isCreatingArea ? (
+          <>
+            <MapEditor center={[form.latitude, form.longitude]} onSave={handleDraftFeature} />
+            <p className="helper">Draw a polygon on the map, then save it as a reusable area.</p>
+            <div className="field">
+              <label htmlFor="area-name">Area name</label>
+              <input
+                id="area-name"
+                value={areaName}
+                onChange={(event) => setAreaName(event.target.value)}
+                placeholder="My coverage area"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="area-description">Description (optional)</label>
+              <textarea
+                id="area-description"
+                value={areaDescription}
+                onChange={(event) => setAreaDescription(event.target.value)}
+                rows={3}
+              />
+            </div>
+            {areaError && <p className="error">{areaError}</p>}
+            <div className="form-actions">
+              <button type="button" className="action secondary" onClick={handleCancelArea} disabled={creatingRegion}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="action"
+                onClick={handleSaveArea}
+                disabled={creatingRegion || !draftFeature}
+              >
+                {creatingRegion ? 'Saving…' : 'Save area'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <LocationPicker
+              latitude={form.latitude}
+              longitude={form.longitude}
+              onChange={handleLocationChange}
+              highlight={selectedRegion?.area_geojson}
+            />
 
-        <ForecastPreview latitude={form.latitude} longitude={form.longitude} />
+            <ForecastPreview latitude={form.latitude} longitude={form.longitude} />
 
-        <div className="location-summary">
-          <div>
-            <strong>Latitude</strong>
-            <span>{form.latitude.toFixed(4)}</span>
-          </div>
-          <div>
-            <strong>Longitude</strong>
-            <span>{form.longitude.toFixed(4)}</span>
-          </div>
-        </div>
+            <div className="location-summary">
+              <div>
+                <strong>Latitude</strong>
+                <span>{form.latitude.toFixed(4)}</span>
+              </div>
+              <div>
+                <strong>Longitude</strong>
+                <span>{form.longitude.toFixed(4)}</span>
+              </div>
+            </div>
+          </>
+        )}
       </fieldset>
 
       <fieldset className="fieldset">
@@ -235,6 +418,7 @@ const CustomAlertForm = ({
             id="condition-type"
             value={form.condition_type}
             onChange={(event) => handleConditionChange(event.target.value as FormState['condition_type'])}
+            disabled={!!alert}
           >
             {Object.entries(CONDITION_CONFIG).map(([value, info]) => (
               <option key={value} value={value}>
@@ -290,7 +474,7 @@ const CustomAlertForm = ({
         <button type="button" className="action secondary" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="action" disabled={submitting}>
+        <button type="submit" className="action" disabled={submitting || isCreatingArea}>
           {submitting ? 'Saving…' : saveLabel}
         </button>
       </div>
@@ -301,17 +485,21 @@ const CustomAlertForm = ({
 export default CustomAlertForm;
 
 function extractRegionCenter(geojson: any): LatLngLiteral | null {
-  if (!geojson) return null;
-  const geometry = geojson.type ? geojson : { type: 'Feature', geometry: geojson };
-  const type = geometry.type === 'Feature' ? geometry.geometry.type : geometry.type;
-  const coordinates = geometry.type === 'Feature' ? geometry.geometry.coordinates : geometry.coordinates;
+  const feature = normalizeGeoJson(geojson);
+  if (!feature?.geometry) return null;
 
+  const { type, coordinates } = feature.geometry as any;
   if (!Array.isArray(coordinates)) return null;
+
+  if (type === 'Point') {
+    const [lng, lat] = coordinates as [number, number];
+    return { lat, lng };
+  }
 
   if (type === 'MultiPolygon') {
     const polygon = coordinates[0]?.[0];
     if (Array.isArray(polygon) && polygon.length) {
-      const [lng, lat] = averageCoords(polygon);
+      const [lng, lat] = averageCoords(polygon as number[][]);
       return { lat, lng };
     }
   }
@@ -319,9 +507,32 @@ function extractRegionCenter(geojson: any): LatLngLiteral | null {
   if (type === 'Polygon') {
     const ring = coordinates[0];
     if (Array.isArray(ring) && ring.length) {
-      const [lng, lat] = averageCoords(ring);
+      const [lng, lat] = averageCoords(ring as number[][]);
       return { lat, lng };
     }
+  }
+
+  return null;
+}
+
+function normalizeGeoJson(input: any): Feature | null {
+  if (!input) return null;
+
+  if (input.type === 'FeatureCollection') {
+    const first = input.features?.[0];
+    return first ? normalizeGeoJson(first) : null;
+  }
+
+  if (input.type === 'Feature') {
+    return input as Feature;
+  }
+
+  if (input.type && input.coordinates) {
+    return {
+      type: 'Feature',
+      geometry: input,
+      properties: {},
+    } as Feature;
   }
 
   return null;

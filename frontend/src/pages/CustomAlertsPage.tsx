@@ -212,6 +212,14 @@ const CustomAlertsPage = () => {
             regions={regions}
             alert={editingAlert}
             onSaved={() => refreshCustomAlerts(editingAlert ? 'Custom alert updated.' : 'Custom alert saved.')}
+            onRegionCreated={(region) => {
+              setRegions((prev) => {
+                if (prev.some((item) => item.id === region.id)) {
+                  return prev;
+                }
+                return [...prev, region];
+              });
+            }}
             onCancel={() => {
               setModalOpen(false);
               setEditingAlert(undefined);

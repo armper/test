@@ -155,15 +155,16 @@ export const createRegion = async (payload: {
   area_geojson: any;
   properties?: Record<string, unknown>;
 }) => {
-  const { data } = await client.post('/map-service/api/v1/regions', payload);
+  const { data } = await client.post<Region>('/map-service/api/v1/regions', payload);
   return data;
 };
 
 export const updateRegion = async (id: number, payload: {
   name?: string;
+  area_geojson?: any;
   properties?: Record<string, unknown>;
 }) => {
-  const { data } = await client.patch(`/map-service/api/v1/regions/${id}`, payload);
+  const { data } = await client.patch<Region>(`/map-service/api/v1/regions/${id}`, payload);
   return data;
 };
 
