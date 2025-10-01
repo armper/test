@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { GeoJSON, MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
+import { GeoJSON, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { LatLngLiteral } from 'leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -36,10 +36,41 @@ const MarkerHandler = memo(({ position, onDrag }: { position: LatLngLiteral; onD
         onDrag(marker.getLatLng());
       },
     }}
-  />
+ />
 ));
 
 MarkerHandler.displayName = 'MarkerHandler';
+
+const HighlightLayer = ({ highlight }: { highlight: any }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!highlight) return;
+    const layer = L.geoJSON(highlight as any);
+    const bounds = layer.getBounds();
+    if (bounds.isValid()) {
+      const samePoint = bounds.getNorthEast().equals(bounds.getSouthWest());
+      if (samePoint) {
+        const center = bounds.getCenter();
+        map.setView(center, Math.max(map.getZoom(), 11));
+      } else {
+        map.fitBounds(bounds.pad(0.1));
+      }
+    }
+    layer.remove();
+  }, [highlight, map]);
+
+  if (!highlight) {
+    return null;
+  }
+
+  return (
+    <GeoJSON
+      data={highlight as any}
+      style={{ color: '#38bdf8', weight: 2, fillOpacity: 0.12 }}
+    />
+  );
+};
 
 const LocationPicker = ({ latitude, longitude, onChange, highlight }: LocationPickerProps) => {
   const [center, setCenter] = useState<LatLngLiteral>({ lat: latitude, lng: longitude });
@@ -67,12 +98,7 @@ const LocationPicker = ({ latitude, longitude, onChange, highlight }: LocationPi
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {highlight ? (
-        <GeoJSON
-          data={highlight}
-          style={{ color: '#38bdf8', weight: 2, fillOpacity: 0.1 }}
-        />
-      ) : null}
+      {highlight ? <HighlightLayer highlight={highlight} /> : null}
       <MarkerHandler position={center} onDrag={handleSelect} />
       <MapClickHandler onClick={handleSelect} />
     </MapContainer>

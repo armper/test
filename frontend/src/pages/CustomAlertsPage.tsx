@@ -7,10 +7,13 @@ import {
   fetchAlerts,
   listConditionSubscriptions,
   fetchRegions,
+  listCities,
+  type CityFeature,
   type Region,
 } from '../services/api';
 import Modal from '../components/Modal';
 import CustomAlertForm from '../components/ConditionAlertsPanel';
+import useBrowserLocation from '../hooks/useBrowserLocation';
 
 interface AlertItem {
   id: number;
@@ -26,6 +29,7 @@ const CustomAlertsPage = () => {
   const [noaaAlerts, setNoaaAlerts] = useState<AlertItem[]>([]);
   const [customAlerts, setCustomAlerts] = useState<ConditionSubscription[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
+  const [cities, setCities] = useState<CityFeature[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -36,14 +40,19 @@ const CustomAlertsPage = () => {
       .sort((a, b) => (new Date(b.last_triggered_at ?? 0).getTime() - new Date(a.last_triggered_at ?? 0).getTime()))
       .slice(0, 5);
   }, [customAlerts]);
+  const { location: browserLocation } = useBrowserLocation(true);
+
   const initialLocation = useMemo(() => {
+    if (browserLocation) {
+      return browserLocation;
+    }
     const fallback = { lat: 40.7128, lng: -74.006 };
     const defaults = user?.default_location as { lat?: number; lng?: number } | undefined;
     return {
       lat: defaults?.lat ?? fallback.lat,
       lng: defaults?.lng ?? fallback.lng,
     };
-  }, [user]);
+  }, [browserLocation, user]);
 
   useEffect(() => {
     fetchAlerts().then(setNoaaAlerts).catch(() => null);
@@ -67,6 +76,12 @@ const CustomAlertsPage = () => {
       .catch(() => setError('Unable to load custom alerts right now.'))
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    listCities()
+      .then((data) => setCities(data.features ?? []))
+      .catch(() => null);
+  }, []);
 
   const refreshCustomAlerts = async (message?: string) => {
     if (!user) return;
@@ -210,6 +225,7 @@ const CustomAlertsPage = () => {
             userId={user.id.toString()}
             initialLocation={initialLocation}
             regions={regions}
+            cities={cities}
             alert={editingAlert}
             onSaved={() => refreshCustomAlerts(editingAlert ? 'Custom alert updated.' : 'Custom alert saved.')}
             onRegionCreated={(region) => {

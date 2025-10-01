@@ -1,5 +1,5 @@
 import type { Feature } from 'geojson';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FeatureGroup, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import type { FeatureGroup as LeafletFeatureGroup, LatLngExpression } from 'leaflet';
 import L from 'leaflet';
@@ -25,6 +25,7 @@ interface MapEditorProps {
 const MapEditor = ({ center, onSave, initialFeature = null, showControls = true, height = 400 }: MapEditorProps) => {
   const [featureGroup, setFeatureGroup] = useState<LeafletFeatureGroup | null>(null);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const previousCenterKey = useRef<string | null>(null);
 
   const handleFeatureGroupRef = useCallback((group: LeafletFeatureGroup | null) => {
     setFeatureGroup(group);
@@ -48,6 +49,24 @@ const MapEditor = ({ center, onSave, initialFeature = null, showControls = true,
       }
     }
   }, [featureGroup, initialFeature, mapInstance]);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const key = Array.isArray(center)
+      ? center.join(',')
+      : typeof center === 'object'
+        ? `${(center as any).lat},${(center as any).lng}`
+        : String(center);
+
+    if (previousCenterKey.current === key) {
+      return;
+    }
+
+    mapInstance.setView(center as L.LatLngExpression);
+    mapInstance.invalidateSize();
+    previousCenterKey.current = key;
+  }, [center, mapInstance]);
 
   return (
     <MapContainer

@@ -13,8 +13,10 @@ import {
   fetchRegions,
   listCities,
   updateRegion,
+  type CityFeature,
   type Region,
 } from '../services/api';
+import useBrowserLocation from '../hooks/useBrowserLocation';
 
 const DEFAULT_CENTER: LatLngLiteral = { lat: 40.7128, lng: -74.006 };
 
@@ -22,7 +24,7 @@ const AreasPage = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [regions, setRegions] = useState<Region[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
+  const [cities, setCities] = useState<CityFeature[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
   const [mode, setMode] = useState<'create' | 'view'>('create');
@@ -61,8 +63,12 @@ const AreasPage = () => {
   }, [user]);
 
   useEffect(() => {
-    listCities().then((data) => setCities(data.features || [])).catch(() => null);
+    listCities()
+      .then((data) => setCities(data.features ?? []))
+      .catch(() => null);
   }, []);
+
+  const { location: browserLocation } = useBrowserLocation(true);
 
   const selectedRegion = useMemo(
     () => regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -74,8 +80,8 @@ const AreasPage = () => {
       setEditName('');
       setEditDescription('');
       setReceiveAlerts(true);
-      setShapeDraft(null);
       setIsEditingShape(false);
+      setShapeDraft(null);
       return;
     }
 
@@ -83,27 +89,49 @@ const AreasPage = () => {
     const properties = (selectedRegion.properties ?? {}) as Record<string, unknown>;
     setEditDescription((properties.description as string) ?? '');
     setReceiveAlerts(properties.receive_alerts !== false);
-    setShapeDraft(regionToFeature(selectedRegion));
     setIsEditingShape(false);
+    setShapeDraft(null);
   }, [selectedRegion]);
+
+  const previewFeature = useMemo(() => regionToFeature(selectedRegion), [selectedRegion]);
 
   const mapCenter = useMemo<LatLngLiteral>(() => {
     if (isEditingShape && shapeDraft) {
       return featureCenter(shapeDraft) ?? DEFAULT_CENTER;
     }
-    if (selectedRegion) {
-      return extractRegionCenter(selectedRegion.area_geojson) ?? DEFAULT_CENTER;
+
+    if (mode === 'create' && draftNewFeature) {
+      return featureCenter(draftNewFeature) ?? DEFAULT_CENTER;
     }
+
+    if (previewFeature) {
+      return featureCenter(previewFeature) ?? DEFAULT_CENTER;
+    }
+
+    if (browserLocation) {
+      return browserLocation;
+    }
+
     const location = user?.default_location as { lat?: number; lng?: number } | undefined;
     if (location?.lat && location?.lng) {
       return { lat: location.lat, lng: location.lng };
     }
+
     if (cities.length > 0) {
-      const [lng, lat] = cities[0].geometry.coordinates;
-      return { lat, lng };
+      return featureCenter(cities[0]) ?? DEFAULT_CENTER;
     }
+
     return DEFAULT_CENTER;
-  }, [cities, isEditingShape, selectedRegion, shapeDraft, user]);
+  }, [
+    browserLocation,
+    cities,
+    draftNewFeature,
+    isEditingShape,
+    mode,
+    previewFeature,
+    shapeDraft,
+    user,
+  ]);
 
   const handleStartCreate = () => {
     setMode('create');
@@ -114,10 +142,12 @@ const AreasPage = () => {
     setStatus(null);
   };
 
-  const handleSelectRegion = (regionId: number) => {
-    setSelectedRegionId(regionId);
+  const handleSelectRegion = (region: Region) => {
+    setSelectedRegionId(region.id);
     setMode('view');
     setStatus(null);
+    setIsEditingShape(false);
+    setShapeDraft(null);
   };
 
   const handleSaveNewArea = async () => {
@@ -244,19 +274,14 @@ const AreasPage = () => {
   };
 
   const handleStartShapeEdit = () => {
-    if (!selectedRegion) return;
-    setShapeDraft(regionToFeature(selectedRegion));
+    if (!previewFeature) return;
+    setShapeDraft(previewFeature);
     setIsEditingShape(true);
   };
 
   const handleCancelShapeEdit = () => {
-    if (!selectedRegion) {
-      setIsEditingShape(false);
-      setShapeDraft(null);
-      return;
-    }
-    setShapeDraft(regionToFeature(selectedRegion));
     setIsEditingShape(false);
+    setShapeDraft(null);
   };
 
   const handleSaveShape = async () => {
@@ -286,12 +311,25 @@ const AreasPage = () => {
 
       showToast('Area shape updated.', 'success');
       setIsEditingShape(false);
+      setShapeDraft(null);
     } catch (error) {
       console.error(error);
       showToast('Unable to update area shape.', 'error');
     } finally {
       setSavingShape(false);
     }
+  };
+
+  const handleApplyCityShape = (city: CityFeature) => {
+    setMode('create');
+    setSelectedRegionId(null);
+    setIsEditingShape(false);
+    setShapeDraft(null);
+    const cloned = JSON.parse(JSON.stringify(city)) as Feature;
+    setDraftNewFeature(cloned);
+    setNewAreaName(`${city.properties.name}, ${city.properties.state}`);
+    setNewAreaDescription(city.properties.cwa ? `Based on NOAA ${city.properties.cwa}` : '');
+    setStatus('City shape loaded — tweak the outline as needed, then save.');
   };
 
   const handleDeleteRegion = async (region: Region) => {
@@ -418,7 +456,7 @@ const AreasPage = () => {
                   <MapEditor
                     center={[mapCenter.lat, mapCenter.lng]}
                     onSave={setShapeDraft}
-                    initialFeature={shapeDraft}
+                    initialFeature={shapeDraft ?? previewFeature}
                     height={420}
                   />
                   <p className="helper">Adjust the vertices, then save your changes.</p>
@@ -437,7 +475,11 @@ const AreasPage = () => {
                   </div>
                 </>
               ) : (
-                <RegionPreview feature={shapeDraft} center={mapCenter} />
+                <RegionPreview
+                  feature={previewFeature}
+                  center={mapCenter}
+                  regionId={selectedRegion?.id ?? null}
+                />
               )}
 
               {!isEditingShape ? (
@@ -514,7 +556,7 @@ const AreasPage = () => {
                   key={region.id}
                   type="button"
                   className={`area-list-item${isActive ? ' is-active' : ''}`}
-                  onClick={() => handleSelectRegion(region.id)}
+                  onClick={() => handleSelectRegion(region)}
                 >
                   <div>
                     <strong>{region.name ?? 'Custom area'}</strong>
@@ -536,10 +578,16 @@ const AreasPage = () => {
       <section className="card">
         <h3>Suggested Cities</h3>
         <div className="pill-list">
-          {cities.map((city: any) => (
-            <span key={city.properties.name} className="pill">
+          {cities.map((city) => (
+            <button
+              key={`${city.properties.name}-${city.properties.state}`}
+              type="button"
+              className="pill pill-button"
+              onClick={() => handleApplyCityShape(city)}
+            >
               {city.properties.name}, {city.properties.state}
-            </span>
+              {city.properties.cwa ? ` · ${city.properties.cwa}` : ''}
+            </button>
           ))}
         </div>
       </section>
@@ -570,12 +618,13 @@ const AreasPage = () => {
 
 export default AreasPage;
 
-const regionToFeature = (region: Region): Feature | null => {
+const regionToFeature = (region: Region | null | undefined): Feature | null => {
+  if (!region?.area_geojson) return null;
   const feature = normalizeGeoJson(region.area_geojson);
   return feature;
 };
 
-const featureCenter = (feature: Feature | null): LatLngLiteral | null => {
+const featureCenter = (feature: Feature | CityFeature | null): LatLngLiteral | null => {
   if (!feature?.geometry) return null;
   return extractRegionCenter(feature);
 };
@@ -646,9 +695,10 @@ const averageCoords = (points: number[][]): [number, number] => {
 interface RegionPreviewProps {
   feature: Feature | null;
   center: LatLngLiteral;
+  regionId: number | null;
 }
 
-const RegionPreview = ({ feature, center }: RegionPreviewProps) => {
+const RegionPreview = ({ feature, center, regionId }: RegionPreviewProps) => {
   const [map, setMap] = useState<L.Map | null>(null);
 
   useEffect(() => {
@@ -658,10 +708,11 @@ const RegionPreview = ({ feature, center }: RegionPreviewProps) => {
     if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [24, 24] });
     }
-  }, [map, feature]);
+  }, [map, feature, regionId]);
 
   return (
     <MapContainer
+      key={regionId ?? 'preview'}
       center={center}
       zoom={11}
       style={{ height: '420px', width: '100%' }}
@@ -673,7 +724,7 @@ const RegionPreview = ({ feature, center }: RegionPreviewProps) => {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {feature?.geometry ? (
-        <GeoJSON data={feature as any} style={{ color: '#38bdf8', weight: 2, fillOpacity: 0.15 }} />
+        <GeoJSON key={regionId ?? 'preview'} data={feature as any} style={{ color: '#38bdf8', weight: 2, fillOpacity: 0.15 }} />
       ) : null}
     </MapContainer>
   );

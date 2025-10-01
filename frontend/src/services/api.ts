@@ -1,3 +1,4 @@
+import type { Feature, FeatureCollection, Geometry } from 'geojson';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
@@ -60,6 +61,16 @@ export const fetchRegions = async (userId: string) => {
   const { data } = await client.get<Region[]>(`/map-service/api/v1/regions/${userId}`);
   return data;
 };
+
+export interface CityProperties {
+  name: string;
+  state: string;
+  cwa?: string;
+}
+
+export type CityFeature = Feature<Geometry, CityProperties>;
+
+export type CityFeatureCollection = FeatureCollection<Geometry, CityProperties>;
 
 export interface ConditionSubscription {
   id: number;
@@ -173,7 +184,7 @@ export const deleteRegion = async (id: number) => {
 };
 
 export const listCities = async () => {
-  const { data } = await client.get('/map-service/api/v1/cities');
+  const { data } = await client.get<CityFeatureCollection>('/map-service/api/v1/cities');
   return data;
 };
 

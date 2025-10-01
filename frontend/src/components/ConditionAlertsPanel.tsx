@@ -13,6 +13,7 @@ import {
   createConditionSubscription,
   updateConditionSubscription,
   createRegion,
+  type CityFeature,
   type Region,
 } from '../services/api';
 
@@ -69,6 +70,7 @@ interface CustomAlertFormProps {
   userId: string;
   initialLocation: LatLngLiteral;
   regions: Region[];
+  cities?: CityFeature[];
   alert?: ConditionSubscription;
   onSaved: () => void;
   onCancel: () => void;
@@ -90,6 +92,7 @@ const CustomAlertForm = ({
   userId,
   initialLocation,
   regions,
+  cities = [],
   alert,
   onSaved,
   onCancel,
@@ -129,6 +132,8 @@ const CustomAlertForm = ({
 
   const [form, setForm] = useState<FormState>(defaults);
   const [availableRegions, setAvailableRegions] = useState<Region[]>(regions);
+  const [selectedCityKey, setSelectedCityKey] = useState('');
+  const [citySelectionChanged, setCitySelectionChanged] = useState(false);
   const [isCreatingArea, setIsCreatingArea] = useState(false);
   const [draftFeature, setDraftFeature] = useState<Feature | null>(null);
   const [areaName, setAreaName] = useState('');
@@ -140,6 +145,30 @@ const CustomAlertForm = ({
   const { showToast } = useToast();
 
   const config = CONDITION_CONFIG[form.condition_type];
+
+  const cityOptions = useMemo(() => {
+    return cities.map((city) => ({
+      key: getCityKey(city),
+      label: `${city.properties.name}, ${city.properties.state}${city.properties.cwa ? ` · ${city.properties.cwa}` : ''}`,
+      feature: city,
+    }));
+  }, [cities]);
+
+  const selectedCityFeature = useMemo<CityFeature | null>(() => {
+    if (!selectedCityKey) return null;
+    return cities.find((city) => getCityKey(city) === selectedCityKey) ?? null;
+  }, [cities, selectedCityKey]);
+
+  const highlightGeometry = useMemo(() => {
+    if (form.selectedRegionId !== 'custom') {
+      const region = availableRegions.find((item) => item.id === form.selectedRegionId);
+      return region?.area_geojson ?? null;
+    }
+    if (selectedCityFeature) {
+      return selectedCityFeature;
+    }
+    return null;
+  }, [availableRegions, form.selectedRegionId, selectedCityFeature]);
 
   useEffect(() => {
     setAvailableRegions(regions);
@@ -153,10 +182,43 @@ const CustomAlertForm = ({
     setAreaDescription('');
     setAreaError(null);
     setError(null);
+    setSelectedCityKey('');
+    setCitySelectionChanged(false);
   }, [defaults]);
+
+  useEffect(() => {
+    if (selectedCityKey || !cities.length) {
+      return;
+    }
+
+    const metadata = alert ? (alert as any).metadata_json ?? (alert as any).metadata ?? {} : {};
+    const cityInfo = metadata.city ??
+      (metadata.city_name
+        ? { name: metadata.city_name, state: metadata.city_state, cwa: metadata.city_cwa }
+        : null);
+
+    if (!cityInfo?.name) {
+      return;
+    }
+
+    const match = cities.find(
+      (city) =>
+        city.properties.name === cityInfo.name &&
+        city.properties.state === cityInfo.state,
+    );
+
+    if (match) {
+      setSelectedCityKey(getCityKey(match));
+    }
+  }, [alert, cities, selectedCityKey]);
 
   const updateForm = (updates: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...updates }));
+  };
+
+  const clearCitySelection = () => {
+    setCitySelectionChanged(true);
+    setSelectedCityKey((prev) => (prev ? '' : prev));
   };
 
   const handleConditionChange = (value: FormState['condition_type']) => {
@@ -165,6 +227,7 @@ const CustomAlertForm = ({
   };
 
   const handleLocationChange = (coords: LatLngLiteral) => {
+    clearCitySelection();
     updateForm({ latitude: coords.lat, longitude: coords.lng, selectedRegionId: 'custom' });
   };
 
@@ -184,6 +247,7 @@ const CustomAlertForm = ({
     setIsCreatingArea(false);
     setDraftFeature(null);
     updateForm({ selectedRegionId: id, latitude: center.lat, longitude: center.lng });
+    clearCitySelection();
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -198,7 +262,35 @@ const CustomAlertForm = ({
     setError(null);
 
     try {
-      const metadata = form.cooldownMinutes > 0 ? { cooldown_minutes: form.cooldownMinutes } : undefined;
+      const baseMetadata = (alert
+        ? ((alert as any).metadata_json ?? (alert as any).metadata ?? {})
+        : {}) as Record<string, unknown>;
+
+      const nextMetadata: Record<string, unknown> = { ...baseMetadata };
+
+      if (form.cooldownMinutes > 0) {
+        nextMetadata.cooldown_minutes = form.cooldownMinutes;
+      } else {
+        delete nextMetadata.cooldown_minutes;
+      }
+
+      if (selectedCityFeature) {
+        nextMetadata.city = {
+          name: selectedCityFeature.properties.name,
+          state: selectedCityFeature.properties.state,
+          cwa: selectedCityFeature.properties.cwa,
+        };
+        delete nextMetadata.city_name;
+        delete nextMetadata.city_state;
+        delete nextMetadata.city_cwa;
+      } else if (citySelectionChanged) {
+        delete nextMetadata.city;
+        delete nextMetadata.city_name;
+        delete nextMetadata.city_state;
+        delete nextMetadata.city_cwa;
+      }
+
+      const metadata = Object.keys(nextMetadata).length ? nextMetadata : undefined;
 
       if (alert) {
         const payload: ConditionSubscriptionUpdatePayload = {
@@ -234,10 +326,31 @@ const CustomAlertForm = ({
     }
   };
 
+  const handleCitySelect = (value: string) => {
+    setCitySelectionChanged(true);
+    if (!value) {
+      clearCitySelection();
+      return;
+    }
+
+    setSelectedCityKey(value);
+    const cityOption = cities.find((city) => getCityKey(city) === value);
+    if (!cityOption) return;
+
+    const center = extractRegionCenter(cityOption);
+    if (center) {
+      updateForm({ latitude: center.lat, longitude: center.lng, selectedRegionId: 'custom' });
+    }
+    setIsCreatingArea(false);
+    setDraftFeature(null);
+    setAreaError(null);
+  };
+
   const handleStartArea = () => {
     setIsCreatingArea(true);
     setDraftFeature(null);
     setAreaError(null);
+    clearCitySelection();
   };
 
   const handleCancelArea = () => {
@@ -246,6 +359,7 @@ const CustomAlertForm = ({
     setAreaName('');
     setAreaDescription('');
     setAreaError(null);
+    clearCitySelection();
   };
 
   const handleDraftFeature = (feature: Feature) => {
@@ -305,6 +419,7 @@ const CustomAlertForm = ({
       setDraftFeature(null);
       setAreaName('');
       setAreaDescription('');
+      clearCitySelection();
       showToast('Area saved. You can now reuse it for alerts.', 'success');
     } catch (err) {
       console.error(err);
@@ -314,11 +429,6 @@ const CustomAlertForm = ({
       setCreatingRegion(false);
     }
   };
-
-  const selectedRegion =
-    form.selectedRegionId === 'custom'
-      ? undefined
-      : availableRegions.find((item) => item.id === form.selectedRegionId);
 
   return (
     <form className="condition-form" onSubmit={handleSubmit}>
@@ -347,6 +457,25 @@ const CustomAlertForm = ({
             {isCreatingArea ? 'Cancel drawing' : 'Draw a new area'}
           </button>
         </div>
+
+        {!isCreatingArea && cityOptions.length ? (
+          <div className="field">
+            <label htmlFor="city-select">Pick a city or CWA</label>
+            <select
+              id="city-select"
+              value={selectedCityKey}
+              onChange={(event) => handleCitySelect(event.target.value)}
+            >
+              <option value="">Choose a location</option>
+              {cityOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <small>Center the map on a known city or weather office boundary.</small>
+          </div>
+        ) : null}
 
         {isCreatingArea ? (
           <>
@@ -391,10 +520,17 @@ const CustomAlertForm = ({
               latitude={form.latitude}
               longitude={form.longitude}
               onChange={handleLocationChange}
-              highlight={selectedRegion?.area_geojson}
+              highlight={highlightGeometry ?? undefined}
             />
 
             <ForecastPreview latitude={form.latitude} longitude={form.longitude} />
+
+            {selectedCityFeature ? (
+              <p className="helper">
+                Centered on {selectedCityFeature.properties.name}, {selectedCityFeature.properties.state}
+                {selectedCityFeature.properties.cwa ? ` — NOAA ${selectedCityFeature.properties.cwa}` : ''}.
+              </p>
+            ) : null}
 
             <div className="location-summary">
               <div>
@@ -483,6 +619,10 @@ const CustomAlertForm = ({
 };
 
 export default CustomAlertForm;
+
+function getCityKey(city: CityFeature) {
+  return `${city.properties.name}|${city.properties.state}`;
+}
 
 function extractRegionCenter(geojson: any): LatLngLiteral | null {
   const feature = normalizeGeoJson(geojson);
