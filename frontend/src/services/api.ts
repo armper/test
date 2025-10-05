@@ -110,6 +110,7 @@ export interface ConditionSubscriptionCreatePayload {
   comparison?: string;
   channel_overrides?: Record<string, boolean>;
   metadata?: Record<string, unknown>;
+  radius_km?: number;
 }
 
 export interface ConditionSubscriptionUpdatePayload {
@@ -121,6 +122,7 @@ export interface ConditionSubscriptionUpdatePayload {
   metadata?: Record<string, unknown>;
   latitude?: number;
   longitude?: number;
+  radius_km?: number;
 }
 
 export const createConditionSubscription = async (

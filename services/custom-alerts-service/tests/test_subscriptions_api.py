@@ -3,6 +3,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.schemas import DEFAULT_RADIUS_KM
+
 
 def test_create_subscription_applies_defaults(client: TestClient) -> None:
     payload: dict[str, Any] = {
@@ -22,6 +24,7 @@ def test_create_subscription_applies_defaults(client: TestClient) -> None:
     assert body["channel_overrides"] == {}
     assert body["user_id"] == payload["user_id"]
     assert body["label"] == payload["label"]
+    assert body["radius_km"] == pytest.approx(DEFAULT_RADIUS_KM)
 
 
 def test_list_subscriptions_returns_only_active(client: TestClient) -> None:
@@ -61,7 +64,11 @@ def test_update_subscription_allows_threshold_override(client: TestClient) -> No
     assert created.status_code == 201
     item = created.json()
 
-    update_payload = {"threshold_value": 60.0, "threshold_unit": "percent"}
+    update_payload = {
+        "threshold_value": 60.0,
+        "threshold_unit": "percent",
+        "radius_km": 42.0,
+    }
     update_response = client.put(
         f"/api/v1/conditions/subscriptions/{item['id']}",
         json=update_payload,
@@ -72,6 +79,7 @@ def test_update_subscription_allows_threshold_override(client: TestClient) -> No
     assert updated["threshold_unit"] == "percent"
     assert updated["comparison"] == "above"
     assert updated["label"] == payload["label"]
+    assert updated["radius_km"] == pytest.approx(42.0)
 
 
 

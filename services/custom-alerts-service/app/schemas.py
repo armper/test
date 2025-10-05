@@ -11,6 +11,9 @@ ConditionType = Literal[
 ]
 
 
+DEFAULT_RADIUS_KM = 25.0
+
+
 DEFAULTS: dict[str, dict[str, Any]] = {
     "temperature_hot": {"threshold_value": 85.0, "threshold_unit": "fahrenheit", "comparison": "above"},
     "temperature_cold": {"threshold_value": 32.0, "threshold_unit": "fahrenheit", "comparison": "below"},
@@ -39,6 +42,14 @@ class ConditionSubscriptionBase(BaseModel):
             raise ValueError("comparison must be 'above' or 'below'")
         return value
 
+    @validator("radius_km")
+    def validate_radius(cls, value):  # type: ignore[override]
+        if value is None:
+            return value
+        if value <= 0:
+            raise ValueError("radius_km must be positive")
+        return value
+
 
 class ConditionSubscriptionCreate(ConditionSubscriptionBase):
     user_id: str
@@ -53,6 +64,7 @@ class ConditionSubscriptionUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    radius_km: Optional[float] = None
 
     @validator("comparison")
     def validate_comparison(cls, value):  # type: ignore[override]
@@ -60,6 +72,14 @@ class ConditionSubscriptionUpdate(BaseModel):
             return value
         if value not in {"above", "below"}:
             raise ValueError("comparison must be 'above' or 'below'")
+        return value
+
+    @validator("radius_km")
+    def validate_radius(cls, value):  # type: ignore[override]
+        if value is None:
+            return value
+        if value <= 0:
+            raise ValueError("radius_km must be positive")
         return value
 
 

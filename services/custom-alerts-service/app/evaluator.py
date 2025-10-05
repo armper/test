@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import anyio
+import asyncio
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -54,7 +54,7 @@ async def evaluate_conditions(
             await weather_client.aclose()
         return
 
-    semaphore = anyio.Semaphore(max(1, settings.forecast_concurrency))
+    semaphore = asyncio.Semaphore(max(1, settings.forecast_concurrency))
     key_to_alerts: dict[Tuple[int, int], List[ConditionAlert]] = {}
     for alert in alerts:
         key = _forecast_cache_key(alert.latitude, alert.longitude)
@@ -76,10 +76,9 @@ async def evaluate_conditions(
                 error=str(exc),
             )
 
-    async with anyio.create_task_group() as tg:
-        for key, grouped in key_to_alerts.items():
-            sample = grouped[0]
-            tg.start_soon(_fetch_for_key, key, sample)
+    for key, grouped in key_to_alerts.items():
+        sample = grouped[0]
+        await _fetch_for_key(key, sample)
 
     base_next_eval = _store_timestamp(now + timedelta(seconds=settings.scheduler_interval_seconds))
 
@@ -235,6 +234,9 @@ def _build_dispatch(session: Session, alert: ConditionAlert, now: datetime) -> D
         "subscription_id": alert.id,
         "match_score": 1.0,
         "condition_type": alert.condition_type,
+        "latitude": alert.latitude,
+        "longitude": alert.longitude,
+        "radius_km": alert.radius_km,
     }
 
     return DispatchRequest(match=match_payload, user_preferences=user_preferences)

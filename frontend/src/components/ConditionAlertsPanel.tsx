@@ -66,6 +66,11 @@ const COOLDOWN_OPTIONS = [
   { label: 'Wait 24 hours between alerts', value: 1440 },
 ];
 
+const DEFAULT_RADIUS_KM = 25;
+const MIN_RADIUS_KM = 5;
+const MAX_RADIUS_KM = 200;
+const KM_TO_MILES = 0.621371;
+
 interface CustomAlertFormProps {
   userId: string;
   initialLocation: LatLngLiteral;
@@ -86,6 +91,7 @@ interface FormState {
   longitude: number;
   selectedRegionId: number | 'custom';
   cooldownMinutes: number;
+  radiusKm: number;
 }
 
 const CustomAlertForm = ({
@@ -113,6 +119,7 @@ const CustomAlertForm = ({
         longitude: alert.longitude,
         selectedRegionId,
         cooldownMinutes: metadata.cooldown_minutes ?? 60,
+        radiusKm: alert.radius_km ?? DEFAULT_RADIUS_KM,
       };
     }
 
@@ -130,6 +137,7 @@ const CustomAlertForm = ({
       longitude: fallbackLng ?? initialLocation.lng,
       selectedRegionId: defaultRegion ? defaultRegion.id : 'custom',
       cooldownMinutes: 60,
+      radiusKm: DEFAULT_RADIUS_KM,
     };
   }, [alert, initialLocation.lat, initialLocation.lng, regions]);
 
@@ -251,6 +259,15 @@ const CustomAlertForm = ({
     updateForm({ latitude: coords.lat, longitude: coords.lng, selectedRegionId: 'custom' });
   };
 
+  const handleRadiusChange = (value: string | number) => {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+    const clamped = Math.min(MAX_RADIUS_KM, Math.max(MIN_RADIUS_KM, parsed));
+    updateForm({ radiusKm: clamped });
+  };
+
   const handleRegionSelect = (value: string) => {
     if (value === 'custom') {
       setIsCreatingArea(false);
@@ -328,6 +345,7 @@ const CustomAlertForm = ({
           metadata,
           latitude: form.latitude,
           longitude: form.longitude,
+          radius_km: form.radiusKm,
         };
         await updateConditionSubscription(alert.id, payload);
       } else {
@@ -338,6 +356,7 @@ const CustomAlertForm = ({
           threshold_value: form.threshold_value,
           latitude: form.latitude,
           longitude: form.longitude,
+          radius_km: form.radiusKm,
           metadata,
         };
         await createConditionSubscription(payload);
@@ -550,7 +569,25 @@ const CustomAlertForm = ({
               longitude={form.longitude}
               onChange={handleLocationChange}
               highlight={highlightGeometry ?? undefined}
+              radiusKm={form.radiusKm}
             />
+
+            <div className="field">
+              <label htmlFor="alert-radius">Alert radius</label>
+              <input
+                id="alert-radius"
+                type="range"
+                min={MIN_RADIUS_KM}
+                max={MAX_RADIUS_KM}
+                step={0.5}
+                value={form.radiusKm}
+                onChange={(event) => handleRadiusChange(event.target.value)}
+              />
+              <small>
+                Map circle spans about {form.radiusKm.toFixed(1)} km (~
+                {(form.radiusKm * KM_TO_MILES).toFixed(1)} miles).
+              </small>
+            </div>
 
             <ForecastPreview latitude={form.latitude} longitude={form.longitude} />
 
@@ -569,6 +606,12 @@ const CustomAlertForm = ({
               <div>
                 <strong>Longitude</strong>
                 <span>{form.longitude.toFixed(4)}</span>
+              </div>
+              <div>
+                <strong>Radius</strong>
+                <span>
+                  {form.radiusKm.toFixed(1)} km ({(form.radiusKm * KM_TO_MILES).toFixed(1)} mi)
+                </span>
               </div>
             </div>
           </>

@@ -1,22 +1,17 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { GeoJSON, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { Circle, GeoJSON, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { LatLngLiteral } from 'leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-import iconUrl from 'leaflet/dist/images/marker-icon.png';
-import iconShadowUrl from 'leaflet/dist/images/marker-shadow.png';
-
-L.Icon.Default.mergeOptions({
-  iconUrl,
-  shadowUrl: iconShadowUrl,
-});
+import '../utils/leafletDefaultIcon';
 
 interface LocationPickerProps {
   latitude: number;
   longitude: number;
   onChange: (coords: LatLngLiteral) => void;
   highlight?: any;
+  radiusKm: number;
 }
 
 const MapClickHandler = ({ onClick }: { onClick: (coords: LatLngLiteral) => void }) => {
@@ -72,7 +67,7 @@ const HighlightLayer = ({ highlight }: { highlight: any }) => {
   );
 };
 
-const LocationPicker = ({ latitude, longitude, onChange, highlight }: LocationPickerProps) => {
+const LocationPicker = ({ latitude, longitude, onChange, highlight, radiusKm }: LocationPickerProps) => {
   const [center, setCenter] = useState<LatLngLiteral>({ lat: latitude, lng: longitude });
 
   useEffect(() => {
@@ -99,6 +94,13 @@ const LocationPicker = ({ latitude, longitude, onChange, highlight }: LocationPi
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {highlight ? <HighlightLayer highlight={highlight} /> : null}
+      {radiusKm > 0 ? (
+        <Circle
+          center={center}
+          radius={radiusKm * 1000}
+          pathOptions={{ color: '#38bdf8', weight: 1.5, fillOpacity: 0.08 }}
+        />
+      ) : null}
       <MarkerHandler position={center} onDrag={handleSelect} />
       <MapClickHandler onClick={handleSelect} />
     </MapContainer>

@@ -18,21 +18,21 @@ const ForecastPreview = ({ latitude, longitude }: ForecastPreviewProps) => {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
 
   useEffect(() => {
-    setStatus('loading');
     const controller = new AbortController();
     setStatus('loading');
     apiClient
-      .get<{ periods: ForecastPeriod[] }>('custom-alerts/api/v1/conditions/preview', {
+      .get<{ periods: ForecastPeriod[] }>('/custom-alerts/api/v1/conditions/preview', {
         params: { latitude, longitude },
         signal: controller.signal,
       })
       .then((response) => {
-        setPeriods(response.data.periods);
+        setPeriods(response.data.periods ?? []);
         setStatus('idle');
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
         console.error(error);
+        setPeriods([]);
         setStatus('error');
       });
     return () => controller.abort();
@@ -45,7 +45,8 @@ const ForecastPreview = ({ latitude, longitude }: ForecastPreviewProps) => {
       </header>
       {status === 'loading' && <p>Loading forecast…</p>}
       {status === 'error' && <p className="error">Unable to load forecast right now.</p>}
-      {status === 'idle' && periods && (
+      {status === 'idle' && periods && periods.length === 0 && <p>Forecast preview unavailable.</p>}
+      {status === 'idle' && periods && periods.length > 0 && (
         <ul>
           {periods.map((period) => (
             <li key={period.start_time}>

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,8 +16,11 @@ from .schemas import (
     ConditionSubscriptionUpdate,
     ForecastPreview,
     DEFAULTS,
+    DEFAULT_RADIUS_KM,
 )
 from .weather import NoaaWeatherClient
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/conditions", tags=["conditions"])
 
@@ -40,6 +44,8 @@ def _apply_defaults(payload: ConditionSubscriptionCreate) -> dict:
         data["comparison"] = defaults["comparison"]
     if data.get("channel_overrides") is None:
         data["channel_overrides"] = {}
+    if data.get("radius_km") is None:
+        data["radius_km"] = DEFAULT_RADIUS_KM
     metadata = data.pop("metadata", None)
     if metadata is not None:
         data["metadata_json"] = metadata
@@ -136,11 +142,13 @@ async def preview_forecast(
     longitude: float = Query(..., ge=-180.0, le=180.0),
     periods: int = Query(3, ge=1, le=6),
 ) -> ForecastPreview:
-    client = NoaaWeatherClient()
-    try:
-        data = await client.fetch_forecast_preview(latitude, longitude, periods)
-    finally:
-        await client.aclose()
+    async with NoaaWeatherClient() as client:
+        try:
+            data = await client.fetch_forecast_preview(latitude, longitude, periods)
+        except Exception as exc:  # pragma: no cover - defensive guard for flaky upstream
+            logger.warning("Unable to fetch NOAA forecast preview", exc_info=exc)
+            return ForecastPreview(periods=[])
+
     formatted = [
         {
             "start_time": item.get("start_time"),

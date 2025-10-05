@@ -3,16 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FeatureGroup, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import type { FeatureGroup as LeafletFeatureGroup, LatLngExpression } from 'leaflet';
 import L from 'leaflet';
-import iconUrl from 'leaflet/dist/images/marker-icon.png';
-import iconShadowUrl from 'leaflet/dist/images/marker-shadow.png';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
 
-L.Icon.Default.mergeOptions({
-  iconUrl,
-  shadowUrl: iconShadowUrl,
-});
+import '../utils/leafletDefaultIcon';
 
 interface MapEditorProps {
   center: LatLngExpression;

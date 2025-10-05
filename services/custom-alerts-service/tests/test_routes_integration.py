@@ -3,6 +3,7 @@ from datetime import datetime
 import pytest
 
 from app.models import ConditionAlert, UserPreference
+from app.schemas import DEFAULT_RADIUS_KM
 from app.weather import NoaaWeatherClient
 
 
@@ -37,7 +38,9 @@ def create_alert(client):
     }
     response = client.post("/api/v1/conditions/subscriptions", json=payload)
     assert response.status_code == 201
-    return response.json()
+    data = response.json()
+    assert data["radius_km"] == pytest.approx(DEFAULT_RADIUS_KM)
+    return data
 
 
 def test_run_endpoint_updates_last_triggered(client, session_local):
@@ -92,6 +95,11 @@ def test_run_endpoint_merges_channel_overrides(client, session_local, monkeypatc
     assert run_response.json()["triggered"] == 1
 
     assert recorded, "Expected dry-run dispatcher to capture at least one message"
+    match = recorded[0]["match"]
+    assert match["latitude"] == pytest.approx(payload["latitude"])
+    assert match["longitude"] == pytest.approx(payload["longitude"])
+    assert match["radius_km"] == pytest.approx(payload.get("radius_km", DEFAULT_RADIUS_KM))
+
     channels = recorded[0]["user_preferences"]["channels"]
     assert channels["email"] is True
     assert channels["sms"] is True
@@ -125,3 +133,19 @@ def test_forecast_preview_returns_periods(client, monkeypatch):
     body = response.json()
     assert len(body["periods"]) == 1
     assert body["periods"][0]["short_forecast"] == "Sunny"
+
+
+def test_forecast_preview_handles_failure(client, monkeypatch):
+    async def fake_preview(self, latitude, longitude, periods):
+        raise RuntimeError("noaa down")
+
+    async def fake_close(self):
+        return None
+
+    monkeypatch.setattr("app.weather.NoaaWeatherClient.fetch_forecast_preview", fake_preview)
+    monkeypatch.setattr("app.weather.NoaaWeatherClient.aclose", fake_close)
+
+    response = client.get("/api/v1/conditions/preview", params={"latitude": 40.0, "longitude": -74.0})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["periods"] == []
