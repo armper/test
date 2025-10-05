@@ -25,6 +25,7 @@ class ConditionAlert(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_triggered_at = Column(DateTime, nullable=True)
+    next_evaluation_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
 
     def apply_update_timestamp(self) -> None:
         self.updated_at = datetime.utcnow()

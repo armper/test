@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import asyncio
+import anyio
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .metrics import alert_evaluations_total, alert_matches_total
 from .models import ConditionAlert, UserPreference
 from .weather import NoaaWeatherClient
 
@@ -37,24 +38,76 @@ async def evaluate_conditions(
         weather_client = NoaaWeatherClient()
         close_client = True
 
+    due_time = _store_timestamp(now)
+
     alerts: List[ConditionAlert] = (
         session.query(ConditionAlert)
-        .filter(ConditionAlert.is_active.is_(True))
+        .filter(
+            ConditionAlert.is_active.is_(True),
+            ConditionAlert.next_evaluation_at <= due_time,
+        )
         .all()
     )
 
+    if not alerts:
+        if close_client:
+            await weather_client.aclose()
+        return
+
+    semaphore = anyio.Semaphore(max(1, settings.forecast_concurrency))
+    key_to_alerts: dict[Tuple[int, int], List[ConditionAlert]] = {}
     for alert in alerts:
+        key = _forecast_cache_key(alert.latitude, alert.longitude)
+        key_to_alerts.setdefault(key, []).append(alert)
+
+    forecast_cache: dict[Tuple[int, int], Optional[List[Dict[str, Any]]]] = {}
+
+    async def _fetch_for_key(key: Tuple[int, int], sample: ConditionAlert) -> None:
         try:
-            if not _should_evaluate(alert, now):
+            async with semaphore:
+                periods = await weather_client.fetch_hourly_forecast(sample.latitude, sample.longitude)
+            forecast_cache[key] = periods
+        except Exception as exc:  # pragma: no cover - logged for observability
+            forecast_cache[key] = None
+            logger.exception(
+                "Failed to fetch forecast",
+                alert_id=sample.id,
+                user_id=sample.user_id,
+                error=str(exc),
+            )
+
+    async with anyio.create_task_group() as tg:
+        for key, grouped in key_to_alerts.items():
+            sample = grouped[0]
+            tg.start_soon(_fetch_for_key, key, sample)
+
+    base_next_eval = _store_timestamp(now + timedelta(seconds=settings.scheduler_interval_seconds))
+
+    for alert in alerts:
+        key = _forecast_cache_key(alert.latitude, alert.longitude)
+        periods = forecast_cache.get(key)
+        alert.next_evaluation_at = base_next_eval
+        tenant = _tenant_from_alert(alert)
+        alert_evaluations_total.labels(tenant=tenant).inc()
+        try:
+            if periods is None:
+                alert.apply_update_timestamp()
+                session.add(alert)
                 continue
-            periods = await weather_client.fetch_hourly_forecast(alert.latitude, alert.longitude)
             if not _condition_met(alert, periods):
+                alert.apply_update_timestamp()
+                session.add(alert)
                 continue
             dispatch = _build_dispatch(session, alert, now)
             await dispatcher.send(dispatch.asdict())
             alert.last_triggered_at = _store_timestamp(now)
+            cooldown_minutes = _cooldown_minutes(alert)
+            cooldown_eval = _store_timestamp(now + timedelta(minutes=cooldown_minutes))
+            if cooldown_eval > alert.next_evaluation_at:
+                alert.next_evaluation_at = cooldown_eval
             alert.apply_update_timestamp()
             session.add(alert)
+            alert_matches_total.labels(tenant=tenant).inc()
             logger.info(
                 "Custom condition triggered",
                 alert_id=alert.id,
@@ -63,7 +116,6 @@ async def evaluate_conditions(
             )
         except Exception as exc:  # pragma: no cover - logged for observability
             logger.exception("Failed to evaluate condition", alert_id=alert.id, error=str(exc))
-            continue
 
     session.commit()
 
@@ -81,15 +133,12 @@ def _store_timestamp(dt: datetime) -> datetime:
     return _to_utc(dt).replace(tzinfo=None)
 
 
-def _should_evaluate(alert: ConditionAlert, now: datetime) -> bool:
+def _cooldown_minutes(alert: ConditionAlert) -> int:
     metadata = alert.metadata_json or {}
-    cooldown_minutes = metadata.get("cooldown_minutes", settings.cooldown_minutes_default)
-    if alert.last_triggered_at is None:
-        return True
-    last = _to_utc(alert.last_triggered_at)
-    current = _to_utc(now)
-    elapsed = current - last
-    return elapsed >= timedelta(minutes=cooldown_minutes)
+    value = metadata.get("cooldown_minutes")
+    if isinstance(value, (int, float)) and value >= 0:
+        return int(value)
+    return settings.cooldown_minutes_default
 
 
 def _condition_met(alert: ConditionAlert, periods: Iterable[Dict[str, Any]]) -> bool:
@@ -201,3 +250,21 @@ def _load_user_preferences(session: Session, user_id: str) -> Dict[str, Any]:
         "quiet_hours": getattr(pref, "quiet_hours", None),
         "severity_filter": getattr(pref, "severity_filter", None),
     }
+
+
+def _tenant_from_alert(alert: ConditionAlert) -> str:
+    metadata = alert.metadata_json or {}
+    tenant = metadata.get("tenant_id")
+    if isinstance(tenant, str) and tenant:
+        return tenant
+    return "default"
+
+
+def _forecast_cache_key(latitude: float, longitude: float) -> Tuple[int, int]:
+    precision = settings.forecast_cache_precision
+    if precision <= 0:
+        return (int(round(latitude * 10000)), int(round(longitude * 10000)))
+    scale = 1.0 / precision
+    lat_key = int(round(latitude * scale))
+    lon_key = int(round(longitude * scale))
+    return (lat_key, lon_key)

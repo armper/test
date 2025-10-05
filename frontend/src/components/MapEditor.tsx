@@ -68,6 +68,20 @@ const MapEditor = ({ center, onSave, initialFeature = null, showControls = true,
     previousCenterKey.current = key;
   }, [center, mapInstance]);
 
+  useEffect(() => {
+    if (!mapInstance) return;
+    const map = mapInstance;
+    const wasEnabled = map.doubleClickZoom?.enabled?.();
+    if (wasEnabled) {
+      map.doubleClickZoom.disable();
+    }
+    return () => {
+      if (wasEnabled && map.doubleClickZoom) {
+        map.doubleClickZoom.enable();
+      }
+    };
+  }, [mapInstance]);
+
   return (
     <MapContainer
       center={center}
@@ -98,11 +112,26 @@ const DrawControls = ({ featureGroup, onSave }: DrawControlsProps) => {
     if (!map || !featureGroup) return undefined;
 
     const drawControl = new L.Control.Draw({
-      edit: { featureGroup },
+      edit: {
+        featureGroup,
+        poly: {
+          allowIntersection: false,
+        },
+      },
       draw: {
         polygon: {
           allowIntersection: false,
           showArea: true,
+          drawError: {
+            color: '#f87171',
+            message: 'Polygon edges cannot cross.',
+            timeout: 1500,
+          },
+          shapeOptions: {
+            weight: 2,
+            color: '#38bdf8',
+            fillOpacity: 0.15,
+          },
         },
         rectangle: true,
         polyline: false,

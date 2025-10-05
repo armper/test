@@ -13,10 +13,15 @@ class Settings(BaseSettings):
         "WeatherAlertsCustomConditions/0.1 (support@example.com)",
         env="CUSTOM_ALERTS_NOAA_USER_AGENT",
     )
+    noaa_max_retries: int = Field(3, env="CUSTOM_ALERTS_NOAA_MAX_RETRIES")
+    noaa_initial_backoff_seconds: float = Field(0.5, env="CUSTOM_ALERTS_NOAA_BACKOFF_SECONDS")
+    noaa_backoff_factor: float = Field(2.0, env="CUSTOM_ALERTS_NOAA_BACKOFF_FACTOR")
     evaluation_window_hours: int = Field(6, env="CUSTOM_ALERTS_WINDOW_HOURS")
     cooldown_minutes_default: int = Field(60, env="CUSTOM_ALERTS_COOLDOWN_MINUTES")
     kafka_bootstrap_servers: str = Field("kafka:9092", env="CUSTOM_ALERTS_KAFKA_BOOTSTRAP")
     dispatch_topic: str = Field("notify.dispatch.request.v1", env="CUSTOM_ALERTS_DISPATCH_TOPIC")
+    forecast_concurrency: int = Field(10, env="CUSTOM_ALERTS_FORECAST_CONCURRENCY")
+    forecast_cache_precision: float = Field(0.25, env="CUSTOM_ALERTS_FORECAST_CACHE_PRECISION")
     enable_scheduler: bool = Field(False, env="CUSTOM_ALERTS_ENABLE_SCHEDULER")
     scheduler_interval_seconds: int = Field(600, env="CUSTOM_ALERTS_SCHEDULER_INTERVAL")
     scheduler_start_max_retries: int = Field(10, env="CUSTOM_ALERTS_SCHEDULER_RETRIES")

@@ -1,5 +1,5 @@
 import type { Feature } from 'geojson';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GeoJSON, MapContainer, TileLayer } from 'react-leaflet';
 import type { LatLngLiteral } from 'leaflet';
 import L from 'leaflet';
@@ -10,11 +10,14 @@ import { useToast } from '../context/ToastContext';
 import {
   createRegion,
   deleteRegion,
+  deleteConditionSubscription,
   fetchRegions,
   listCities,
+  listConditionSubscriptions,
   updateRegion,
   type CityFeature,
   type Region,
+  type ConditionSubscription,
 } from '../services/api';
 import useBrowserLocation from '../hooks/useBrowserLocation';
 
@@ -33,6 +36,7 @@ const AreasPage = () => {
   const [newAreaName, setNewAreaName] = useState('');
   const [newAreaDescription, setNewAreaDescription] = useState('');
   const [savingNewArea, setSavingNewArea] = useState(false);
+  const [createMapNonce, setCreateMapNonce] = useState(0);
 
   const [isEditingShape, setIsEditingShape] = useState(false);
   const [shapeDraft, setShapeDraft] = useState<Feature | null>(null);
@@ -45,6 +49,9 @@ const AreasPage = () => {
   const [updatingAlerts, setUpdatingAlerts] = useState(false);
 
   const [confirmDeleteRegion, setConfirmDeleteRegion] = useState<Region | null>(null);
+  const [alertsByRegion, setAlertsByRegion] = useState<Record<number, ConditionSubscription[]>>({});
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -70,10 +77,44 @@ const AreasPage = () => {
 
   const { location: browserLocation } = useBrowserLocation(true);
 
+  const refreshRegionAlerts = useCallback(async () => {
+    if (!user) {
+      setAlertsByRegion({});
+      setAlertsLoading(false);
+      return;
+    }
+    setAlertsLoading(true);
+    try {
+      const alerts = await listConditionSubscriptions(user.id.toString());
+      const grouped: Record<number, ConditionSubscription[]> = {};
+      alerts.forEach((alert) => {
+        const metadata = (alert as any).metadata_json ?? (alert as any).metadata ?? {};
+        const regionId = metadata.region_id ?? metadata.regionId ?? metadata.regionID;
+        if (!regionId) return;
+        if (!grouped[regionId]) grouped[regionId] = [];
+        grouped[regionId].push(alert);
+      });
+      setAlertsByRegion(grouped);
+      setAlertsError(null);
+    } catch (error) {
+      console.error(error);
+      setAlertsByRegion({});
+      setAlertsError('Unable to load alerts attached to your areas.');
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    refreshRegionAlerts();
+  }, [refreshRegionAlerts]);
+
   const selectedRegion = useMemo(
     () => regions.find((region) => region.id === selectedRegionId) ?? null,
     [regions, selectedRegionId],
   );
+
+  const selectedRegionAlertsCount = selectedRegion ? (alertsByRegion[selectedRegion.id]?.length ?? 0) : 0;
 
   useEffect(() => {
     if (!selectedRegion) {
@@ -140,6 +181,7 @@ const AreasPage = () => {
     setNewAreaName('');
     setNewAreaDescription('');
     setStatus(null);
+    setCreateMapNonce((prev) => prev + 1);
   };
 
   const handleSelectRegion = (region: Region) => {
@@ -179,12 +221,14 @@ const AreasPage = () => {
 
       const refreshed = await fetchRegions(user.id.toString());
       setRegions(refreshed);
+      await refreshRegionAlerts();
       setSelectedRegionId(created.id);
       setMode('view');
       setStatus('Area saved!');
       setDraftNewFeature(null);
       setNewAreaName('');
       setNewAreaDescription('');
+      setCreateMapNonce((prev) => prev + 1);
       showToast('Area saved successfully.', 'success');
     } catch (error) {
       console.error(error);
@@ -330,12 +374,24 @@ const AreasPage = () => {
     setNewAreaName(`${city.properties.name}, ${city.properties.state}`);
     setNewAreaDescription(city.properties.cwa ? `Based on NOAA ${city.properties.cwa}` : '');
     setStatus('City shape loaded — tweak the outline as needed, then save.');
+    setCreateMapNonce((prev) => prev + 1);
   };
 
   const handleDeleteRegion = async (region: Region) => {
     try {
+      const alerts = alertsByRegion[region.id] ?? [];
+      if (alerts.length) {
+        await Promise.all(alerts.map((alert) => deleteConditionSubscription(alert.id)));
+        showToast(`Removed ${alerts.length} alert${alerts.length === 1 ? '' : 's'} linked to this area.`, 'info');
+      }
       await deleteRegion(region.id);
       setRegions((prev) => prev.filter((item) => item.id !== region.id));
+      setAlertsByRegion((prev) => {
+        const next = { ...prev };
+        delete next[region.id];
+        return next;
+      });
+      await refreshRegionAlerts();
       showToast('Area removed.', 'success');
       if (selectedRegionId === region.id) {
         if (regions.length > 1) {
@@ -372,6 +428,8 @@ const AreasPage = () => {
     return null;
   }
 
+  const pendingDeleteAlerts = confirmDeleteRegion ? (alertsByRegion[confirmDeleteRegion.id]?.length ?? 0) : 0;
+
   return (
     <div className="page-section">
       <div className="section-header">
@@ -388,6 +446,8 @@ const AreasPage = () => {
           </button>
         </div>
       </div>
+
+      {alertsError && <p className="error">{alertsError}</p>}
 
       <div className="area-layout">
         <section className="card area-workspace">
@@ -410,6 +470,7 @@ const AreasPage = () => {
           {mode === 'create' ? (
             <>
               <MapEditor
+                key={`create-map-${createMapNonce}`}
                 center={[mapCenter.lat, mapCenter.lng]}
                 onSave={setDraftNewFeature}
                 initialFeature={draftNewFeature}
@@ -513,6 +574,7 @@ const AreasPage = () => {
                     />
                     <span>{receiveAlerts ? 'Alerts enabled' : 'Alerts muted'}</span>
                   </label>
+                  <p className="meta">Linked custom alerts: {selectedRegionAlertsCount}</p>
                   <div className="form-actions">
                     <button type="button" className="action secondary" onClick={handleStartShapeEdit}>
                       Edit shape
@@ -551,6 +613,7 @@ const AreasPage = () => {
               const properties = (region.properties ?? {}) as Record<string, unknown>;
               const isActive = region.id === selectedRegionId;
               const center = extractRegionCenter(region.area_geojson);
+              const alertCount = alertsByRegion[region.id]?.length ?? 0;
               return (
                 <button
                   key={region.id}
@@ -561,6 +624,7 @@ const AreasPage = () => {
                   <div>
                     <strong>{region.name ?? 'Custom area'}</strong>
                     <p>{properties.description ?? 'GeoJSON polygon'}</p>
+                    <span className="meta">Alerts: {alertCount}</span>
                   </div>
                   {center ? (
                     <span className="meta">
@@ -598,6 +662,16 @@ const AreasPage = () => {
             Are you sure you want to delete{' '}
             <strong>{confirmDeleteRegion.name ?? 'this area'}</strong>? This action cannot be undone.
           </p>
+          {alertsLoading ? (
+            <p className="meta">Checking for linked alerts…</p>
+          ) : pendingDeleteAlerts > 0 ? (
+            <p className="error">
+              This will also remove{' '}
+              <strong>{pendingDeleteAlerts}</strong> custom alert{pendingDeleteAlerts === 1 ? '' : 's'} tied to this area.
+            </p>
+          ) : (
+            <p className="meta">No custom alerts are linked to this area.</p>
+          )}
           <div className="form-actions">
             <button type="button" className="action secondary" onClick={() => setConfirmDeleteRegion(null)}>
               Cancel

@@ -102,13 +102,16 @@ const CustomAlertForm = ({
   const defaults = useMemo<FormState>(() => {
     if (alert) {
       const metadata = (alert as any).metadata_json ?? (alert as any).metadata ?? {};
+      const regionId = metadata.region_id ?? metadata.regionId ?? metadata.regionID;
+      const matchedRegion = typeof regionId === 'number' ? regions.find((region) => region.id === regionId) : undefined;
+      const selectedRegionId: FormState['selectedRegionId'] = matchedRegion ? matchedRegion.id : 'custom';
       return {
         condition_type: alert.condition_type,
         label: alert.label,
         threshold_value: alert.threshold_value,
         latitude: alert.latitude,
         longitude: alert.longitude,
-        selectedRegionId: 'custom',
+        selectedRegionId,
         cooldownMinutes: metadata.cooldown_minutes ?? 60,
       };
     }
@@ -134,6 +137,7 @@ const CustomAlertForm = ({
   const [availableRegions, setAvailableRegions] = useState<Region[]>(regions);
   const [selectedCityKey, setSelectedCityKey] = useState('');
   const [citySelectionChanged, setCitySelectionChanged] = useState(false);
+  const [highlightNonce, setHighlightNonce] = useState(0);
   const [isCreatingArea, setIsCreatingArea] = useState(false);
   const [draftFeature, setDraftFeature] = useState<Feature | null>(null);
   const [areaName, setAreaName] = useState('');
@@ -160,15 +164,28 @@ const CustomAlertForm = ({
   }, [cities, selectedCityKey]);
 
   const highlightGeometry = useMemo(() => {
+    const stamp = highlightNonce;
     if (form.selectedRegionId !== 'custom') {
       const region = availableRegions.find((item) => item.id === form.selectedRegionId);
-      return region?.area_geojson ?? null;
+      const cloned = cloneGeoJson(region?.area_geojson);
+      return attachNonce(cloned, stamp);
     }
     if (selectedCityFeature) {
-      return selectedCityFeature;
+      const cloned = cloneGeoJson(selectedCityFeature);
+      return attachNonce(cloned, stamp);
     }
     return null;
-  }, [availableRegions, form.selectedRegionId, selectedCityFeature]);
+  }, [availableRegions, form.selectedRegionId, selectedCityFeature, highlightNonce]);
+
+  const locationPickerKey = useMemo(() => {
+    if (selectedCityKey) {
+      return `city:${selectedCityKey}:${highlightNonce}`;
+    }
+    if (form.selectedRegionId !== 'custom') {
+      return `region:${form.selectedRegionId}:${highlightNonce}`;
+    }
+    return `custom:${highlightNonce}`;
+  }, [form.selectedRegionId, selectedCityKey, highlightNonce]);
 
   useEffect(() => {
     setAvailableRegions(regions);
@@ -184,6 +201,7 @@ const CustomAlertForm = ({
     setError(null);
     setSelectedCityKey('');
     setCitySelectionChanged(false);
+    setHighlightNonce((prev) => prev + 1);
   }, [defaults]);
 
   useEffect(() => {
@@ -209,6 +227,7 @@ const CustomAlertForm = ({
 
     if (match) {
       setSelectedCityKey(getCityKey(match));
+      setHighlightNonce((prev) => prev + 1);
     }
   }, [alert, cities, selectedCityKey]);
 
@@ -218,7 +237,8 @@ const CustomAlertForm = ({
 
   const clearCitySelection = () => {
     setCitySelectionChanged(true);
-    setSelectedCityKey((prev) => (prev ? '' : prev));
+    setSelectedCityKey('');
+    setHighlightNonce((prev) => prev + 1);
   };
 
   const handleConditionChange = (value: FormState['condition_type']) => {
@@ -236,6 +256,7 @@ const CustomAlertForm = ({
       setIsCreatingArea(false);
       setDraftFeature(null);
       updateForm({ selectedRegionId: 'custom' });
+      setHighlightNonce((prev) => prev + 1);
       return;
     }
 
@@ -290,6 +311,12 @@ const CustomAlertForm = ({
         delete nextMetadata.city_cwa;
       }
 
+      if (form.selectedRegionId !== 'custom') {
+        nextMetadata.region_id = form.selectedRegionId;
+      } else {
+        delete nextMetadata.region_id;
+      }
+
       const metadata = Object.keys(nextMetadata).length ? nextMetadata : undefined;
 
       if (alert) {
@@ -334,6 +361,7 @@ const CustomAlertForm = ({
     }
 
     setSelectedCityKey(value);
+    setHighlightNonce((prev) => prev + 1);
     const cityOption = cities.find((city) => getCityKey(city) === value);
     if (!cityOption) return;
 
@@ -517,6 +545,7 @@ const CustomAlertForm = ({
         ) : (
           <>
             <LocationPicker
+              key={locationPickerKey}
               latitude={form.latitude}
               longitude={form.longitude}
               onChange={handleLocationChange}
@@ -622,6 +651,20 @@ export default CustomAlertForm;
 
 function getCityKey(city: CityFeature) {
   return `${city.properties.name}|${city.properties.state}`;
+}
+
+function cloneGeoJson(input: any) {
+  if (!input) return null;
+  try {
+    return JSON.parse(JSON.stringify(input));
+  } catch (err) {
+    return input;
+  }
+}
+
+function attachNonce(geojson: any, nonce: number) {
+  if (!geojson || typeof geojson !== 'object') return geojson;
+  return { ...geojson, __nonce: nonce };
 }
 
 function extractRegionCenter(geojson: any): LatLngLiteral | null {

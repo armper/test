@@ -1,12 +1,22 @@
-import { ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const NAV_LINKS = [
-  { to: '/', label: 'Overview' },
-  { to: '/areas', label: 'My Areas' },
-  { to: '/custom-alerts', label: 'Custom Alerts' },
-  { to: '/admin', label: 'Admin Dashboard', requiresAdmin: true },
+const NAV_SECTIONS = [
+  {
+    title: 'Alerts',
+    links: [
+      { to: '/custom-alerts', label: 'Custom Alerts', description: 'Create and manage your custom triggers' },
+      { to: '/', label: 'NOAA Overview', description: 'See official weather advisories', end: true },
+    ],
+  },
+  {
+    title: 'Management',
+    links: [
+      { to: '/areas', label: 'My Areas', description: 'Draw and refine coverage regions' },
+      { to: '/admin', label: 'Admin Dashboard', description: 'System insights', requiresAdmin: true },
+    ],
+  },
 ];
 
 const AppLayout = () => {
@@ -39,20 +49,30 @@ const AppLayout = () => {
           <strong>Navigation</strong>
         </div>
         <nav>
-          <ul>
-            {NAV_LINKS.filter((link) => !link.requiresAdmin || user?.roles.includes('admin')).map((link) => (
-              <li key={link.to}>
-                <NavLink
-                  to={link.to}
-                  className={({ isActive }) => (isActive ? 'active' : '')}
-                  onClick={closeNav}
-                  end
-                >
-                  {link.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+          {NAV_SECTIONS.map((section) => {
+            const links = section.links.filter((link) => !link.requiresAdmin || user?.roles.includes('admin'));
+            if (!links.length) return null;
+            return (
+              <div className="nav-section" key={section.title}>
+                <strong>{section.title}</strong>
+                <ul>
+                  {links.map((link) => (
+                    <li key={link.to}>
+                      <NavLink
+                        to={link.to}
+                        className={({ isActive }) => (isActive ? 'active' : '')}
+                        onClick={closeNav}
+                        end={link.end}
+                      >
+                        <span className="nav-label">{link.label}</span>
+                        {link.description ? <span className="nav-description">{link.description}</span> : null}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
       </aside>
 

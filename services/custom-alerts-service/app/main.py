@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from . import db
 from .config import settings
 from .routes import router
+from .metrics import router as metrics_router
 from .scheduler import ConditionScheduler
 
 app = FastAPI(title="Custom Condition Alerts", version="0.1.0")
@@ -28,3 +29,4 @@ async def healthcheck() -> dict:
 
 
 app.include_router(router)
+app.include_router(metrics_router)
