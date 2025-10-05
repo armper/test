@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSummary } from '../services/api';
 
@@ -41,6 +42,13 @@ const AdminDashboard = () => {
           <article className="card">
             <h3>Notifications Sent</h3>
             <p>{summary.total_notifications}</p>
+          </article>
+          <article className="card">
+            <h3>Service Catalogue</h3>
+            <p>Review Swagger/OpenAPI definitions and health status for every platform service.</p>
+            <Link to="/admin/docs" className="action secondary">
+              Open docs hub
+            </Link>
           </article>
         </div>
       ) : (

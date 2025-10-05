@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from app.models import ConditionAlert, UserPreference
+from app.models import AlertDeliveryHistory, ConditionAlert, UserPreference
 from app.evaluator import evaluate_conditions
 
 
@@ -70,6 +70,17 @@ async def test_evaluator_triggers_temperature_hot(db_session) -> None:
     assert alert.last_triggered_at is not None
     assert weather_client.calls == 1
 
+    history = (
+        db_session.query(AlertDeliveryHistory)
+        .filter(AlertDeliveryHistory.user_id == "user-123")
+        .all()
+    )
+    assert len(history) == 1
+    entry = history[0]
+    assert entry.source == "custom"
+    assert entry.channels["email"] is True
+    assert entry.title.startswith("Notify me")
+
 
 @pytest.mark.anyio(backend="asyncio")
 async def test_evaluator_respects_cooldown(db_session) -> None:
@@ -113,6 +124,13 @@ async def test_evaluator_respects_cooldown(db_session) -> None:
     assert len(dispatcher.messages) == 2
     assert weather_client.calls == 2
 
+    history = (
+        db_session.query(AlertDeliveryHistory)
+        .filter(AlertDeliveryHistory.user_id == "user-456")
+        .all()
+    )
+    assert len(history) == 2
+
 
 @pytest.mark.anyio(backend="asyncio")
 async def test_evaluator_skips_when_threshold_not_met(db_session) -> None:
@@ -149,3 +167,9 @@ async def test_evaluator_skips_when_threshold_not_met(db_session) -> None:
 
     assert dispatcher.messages == []
     assert weather_client.calls == 1
+    history = (
+        db_session.query(AlertDeliveryHistory)
+        .filter(AlertDeliveryHistory.user_id == "user-789")
+        .all()
+    )
+    assert history == []

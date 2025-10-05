@@ -2,9 +2,11 @@ import { Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminDocsPage from './pages/AdminDocsPage';
 import AreasPage from './pages/AreasPage';
 import Dashboard from './pages/Dashboard';
 import CustomAlertsPage from './pages/CustomAlertsPage';
+import AlertHistoryPage from './pages/AlertHistoryPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -27,6 +29,14 @@ function App() {
           }
         />
         <Route
+          path="/admin/docs"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDocsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           element={
             <ProtectedRoute>
               <AppLayout />
@@ -36,6 +46,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="areas" element={<AreasPage />} />
           <Route path="custom-alerts" element={<CustomAlertsPage />} />
+          <Route path="history" element={<AlertHistoryPage />} />
         </Route>
         </Routes>
         <Toaster />

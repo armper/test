@@ -15,4 +15,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics
+        include: health,metrics,info
+
+springdoc:
+  api-docs:
+    path: /openapi.json
+  swagger-ui:
+    path: /docs
+    operations-sorter: alpha
+    tags-sorter: alpha
+    display-request-duration: true

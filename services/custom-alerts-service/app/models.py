@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import List
 
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
 from sqlalchemy.types import JSON
@@ -40,3 +41,41 @@ class UserPreference(Base):
     quiet_hours = Column(JSON, nullable=True)
     severity_filter = Column(String, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class AlertDeliveryHistory(Base):
+    __tablename__ = "alert_delivery_history"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, nullable=False, index=True)
+    source = Column(String, nullable=False)
+    source_id = Column(String, nullable=True)
+    title = Column(String, nullable=False)
+    summary = Column(String, nullable=True)
+    severity = Column(String, nullable=True)
+    channels = Column(JSON, nullable=False, default=dict)
+    triggered_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def channel_list(self) -> List[str]:
+        data = self.channels or {}
+        if isinstance(data, dict):
+            return [name for name, enabled in data.items() if bool(enabled)]
+        if isinstance(data, list):
+            return [str(item) for item in data]
+        return []
+
+    @staticmethod
+    def build_summary(payload):
+        if not isinstance(payload, dict):
+            return None
+        for key in ("summary", "headline", "title", "event", "description"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None

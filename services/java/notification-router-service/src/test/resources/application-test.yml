@@ -14,3 +14,6 @@ topics:
   notify-email: test.notify.email
   notify-push: test.notify.push
   notify-sms: test.notify.sms
+alerts:
+  history:
+    base-url: http://localhost:65535/ignore

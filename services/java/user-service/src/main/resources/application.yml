@@ -13,3 +13,18 @@ security:
     resourceserver:
       jwt:
         issuer-uri: ${JWT_ISSUER:http://localhost/auth}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+springdoc:
+  api-docs:
+    path: /openapi.json
+  swagger-ui:
+    path: /docs
+    operations-sorter: alpha
+    tags-sorter: alpha
+    display-request-duration: true

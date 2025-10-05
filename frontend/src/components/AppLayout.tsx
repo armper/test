@@ -8,6 +8,7 @@ const NAV_SECTIONS = [
     links: [
       { to: '/custom-alerts', label: 'Custom Alerts', description: 'Create and manage your custom triggers' },
       { to: '/', label: 'NOAA Overview', description: 'See official weather advisories', end: true },
+      { to: '/history', label: 'Alert History', description: 'Review every alert you have received' },
     ],
   },
   {
@@ -15,6 +16,12 @@ const NAV_SECTIONS = [
     links: [
       { to: '/areas', label: 'My Areas', description: 'Draw and refine coverage regions' },
       { to: '/admin', label: 'Admin Dashboard', description: 'System insights', requiresAdmin: true },
+      {
+        to: '/admin/docs',
+        label: 'Service Docs',
+        description: 'Swagger catalog & health',
+        requiresAdmin: true,
+      },
     ],
   },
 ];

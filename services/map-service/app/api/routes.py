@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
-from datetime import datetime
-from typing import Any, List
+from datetime import datetime, timezone
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -13,8 +13,17 @@ from ..core.config import settings
 from ..db.base import Base
 from ..db.session import engine
 from ..models.alert import Alert
+from ..models.alert_history import AlertDeliveryHistory
 from ..models.region import Region
-from ..schemas import AlertSummary, RegionCreate, RegionResponse, RegionUpdate
+from ..schemas import (
+    AlertHistoryCreate,
+    AlertHistoryItem,
+    AlertHistoryResponse,
+    AlertSummary,
+    RegionCreate,
+    RegionResponse,
+    RegionUpdate,
+)
 from ..services.geoutil import geojson_to_geometry, geometry_to_geojson
 
 router = APIRouter()
@@ -72,6 +81,98 @@ def list_alerts(
             )
         )
     return payload
+
+
+@router.get("/alerts/history", response_model=AlertHistoryResponse)
+def list_alert_history(
+    user_id: str = Query(..., min_length=1, max_length=255),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    source: Optional[str] = Query(None, min_length=2, max_length=50),
+    severity: Optional[str] = Query(None, min_length=2, max_length=32),
+    channel: Optional[str] = Query(None, min_length=2, max_length=32),
+    search: Optional[str] = Query(None, min_length=2, max_length=120),
+    db: Session = Depends(deps.get_db_session),
+) -> AlertHistoryResponse:
+    records = (
+        db.query(AlertDeliveryHistory)
+        .filter(AlertDeliveryHistory.user_id == user_id)
+        .order_by(AlertDeliveryHistory.triggered_at.desc(), AlertDeliveryHistory.id.desc())
+        .all()
+    )
+
+    search_lower = search.lower() if search else None
+    source_lower = source.lower() if source else None
+    severity_lower = severity.lower() if severity else None
+    channel_lower = channel.lower() if channel else None
+
+    filtered: List[AlertDeliveryHistory] = []
+    # SQLite used in tests lacks rich JSON operators, so apply flexible filtering in Python space.
+    for record in records:
+        if source_lower and (record.source or "").lower() != source_lower:
+            continue
+        if severity_lower and (record.severity or "").lower() != severity_lower:
+            continue
+        if channel_lower:
+            channels = [name.lower() for name in record.channel_list()]
+            if channel_lower not in channels:
+                continue
+        if search_lower:
+            haystacks = [record.title or "", record.summary or ""]
+            if record.payload and isinstance(record.payload, dict):
+                description = record.payload.get("description")
+                if isinstance(description, str):
+                    haystacks.append(description)
+            if not any(search_lower in text.lower() for text in haystacks if text):
+                continue
+        filtered.append(record)
+
+    total = len(filtered)
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = filtered[start:end]
+    has_next = end < total
+
+    return AlertHistoryResponse(
+        items=[AlertHistoryItem.from_orm(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=has_next,
+    )
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+@router.post("/alerts/history", response_model=AlertHistoryItem, status_code=201)
+def create_alert_history(
+    entry: AlertHistoryCreate,
+    db: Session = Depends(deps.get_db_session),
+) -> AlertHistoryItem:
+    summary = entry.summary or AlertDeliveryHistory.build_summary(entry.payload)
+    record = AlertDeliveryHistory(
+        user_id=entry.user_id.strip(),
+        source=entry.source.strip().lower(),
+        source_id=entry.source_id.strip() if entry.source_id else None,
+        title=entry.title.strip(),
+        summary=summary.strip() if isinstance(summary, str) else None,
+        severity=entry.severity.strip().lower() if entry.severity else None,
+        channels=entry.channels or {},
+        triggered_at=_ensure_utc(entry.triggered_at),
+        payload=entry.payload,
+    )
+    if not record.summary:
+        record.summary = record.title
+
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return AlertHistoryItem.from_orm(record)
 
 
 @router.post("/regions", response_model=RegionResponse)

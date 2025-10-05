@@ -38,7 +38,7 @@ class DispatchRouterIT {
         KafkaTemplate<String, String> template = new KafkaTemplate<>(
             new DefaultKafkaProducerFactory<>(producerProps)
         );
-        var message = "{\"user_preferences\":{\"channels\":{\"email\":true},\"quiet_hours\":null,\"severity_filter\":null}}";
+        var message = "{\"match\":{\"condition_type\":\"temperature_hot\",\"user_id\":\"1\"},\"user_preferences\":{\"channels\":{\"email\":true},\"quiet_hours\":null,\"severity_filter\":null}}";
         template.send("notify.dispatch.request.v1", message);
         template.flush();
 

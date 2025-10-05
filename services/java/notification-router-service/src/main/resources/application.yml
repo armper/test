@@ -12,6 +12,15 @@ management:
     web:
       exposure:
         include: health,metrics,info
+
+springdoc:
+  api-docs:
+    path: /openapi.json
+  swagger-ui:
+    path: /docs
+    operations-sorter: alpha
+    tags-sorter: alpha
+    display-request-duration: true
 kafka:
   bootstrap-servers: ${KAFKA_BROKER:localhost:19092}
   consumer:
@@ -22,3 +31,6 @@ topics:
   notify-email: notify.email.request.v1
   notify-push: notify.push.request.v1
   notify-sms: notify.sms.request.v1
+alerts:
+  history:
+    base-url: ${ALERT_HISTORY_BASE_URL:http://map-service:8000/api/v1/alerts/history}

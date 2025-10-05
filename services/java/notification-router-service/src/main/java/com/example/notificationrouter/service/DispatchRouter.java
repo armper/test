@@ -1,11 +1,11 @@
 package com.example.notificationrouter.service;
 
+import com.example.notificationrouter.client.AlertHistoryClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalTime;
 import java.util.Iterator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -16,6 +16,7 @@ public class DispatchRouter {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AlertHistoryClient alertHistoryClient;
 
     @Value("${topics.notify-email}")
     private String emailTopic;
@@ -26,8 +27,9 @@ public class DispatchRouter {
     @Value("${topics.notify-sms}")
     private String smsTopic;
 
-    public DispatchRouter(KafkaTemplate<String, String> kafkaTemplate) {
+    public DispatchRouter(KafkaTemplate<String, String> kafkaTemplate, AlertHistoryClient alertHistoryClient) {
         this.kafkaTemplate = kafkaTemplate;
+        this.alertHistoryClient = alertHistoryClient;
     }
 
     @KafkaListener(topics = "notify.dispatch.request.v1")
@@ -42,6 +44,7 @@ public class DispatchRouter {
             }
 
             Iterator<String> channels = prefs.path("channels").fieldNames();
+            boolean dispatched = false;
             while (channels.hasNext()) {
                 String channel = channels.next();
                 boolean enabled = prefs.path("channels").path(channel).asBoolean(false);
@@ -53,6 +56,10 @@ public class DispatchRouter {
                     operations.send(topic, record.key(), payload);
                     return null;
                 });
+                dispatched = true;
+            }
+            if (dispatched) {
+                alertHistoryClient.recordDispatch(root);
             }
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to route notification", ex);

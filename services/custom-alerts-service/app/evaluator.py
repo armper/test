@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .metrics import alert_evaluations_total, alert_matches_total
-from .models import ConditionAlert, UserPreference
+from .models import AlertDeliveryHistory, ConditionAlert, UserPreference
 from .weather import NoaaWeatherClient
 
 
@@ -99,6 +99,7 @@ async def evaluate_conditions(
                 continue
             dispatch = _build_dispatch(session, alert, now)
             await dispatcher.send(dispatch.asdict())
+            _record_history(session, alert, dispatch, now)
             alert.last_triggered_at = _store_timestamp(now)
             cooldown_minutes = _cooldown_minutes(alert)
             cooldown_eval = _store_timestamp(now + timedelta(minutes=cooldown_minutes))
@@ -252,6 +253,35 @@ def _load_user_preferences(session: Session, user_id: str) -> Dict[str, Any]:
         "quiet_hours": getattr(pref, "quiet_hours", None),
         "severity_filter": getattr(pref, "severity_filter", None),
     }
+
+
+def _record_history(session: Session, alert: ConditionAlert, dispatch: DispatchRequest, now: datetime) -> None:
+    match_payload = dispatch.match.copy()
+    channels = _normalize_channels(dispatch.user_preferences.get("channels", {}))
+    triggered_at = _to_utc(now)
+    summary = AlertDeliveryHistory.build_summary(match_payload)
+    title = match_payload.get("event") or alert.label
+    history = AlertDeliveryHistory(
+        user_id=alert.user_id,
+        source="custom",
+        source_id=str(match_payload.get("alert_id") or alert.id),
+        title=title,
+        summary=summary or alert.label,
+        severity=(match_payload.get("severity") or "info").lower(),
+        channels=channels,
+        triggered_at=triggered_at,
+        payload=match_payload,
+    )
+    session.add(history)
+
+
+def _normalize_channels(channels: Dict[str, Any]) -> Dict[str, bool]:
+    sanitized: Dict[str, bool] = {}
+    for key, value in channels.items():
+        if not isinstance(key, str):
+            continue
+        sanitized[key] = bool(value)
+    return sanitized
 
 
 def _tenant_from_alert(alert: ConditionAlert) -> str:

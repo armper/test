@@ -200,3 +200,49 @@ export interface Region {
   properties?: Record<string, unknown>;
   created_at: string;
 }
+
+export interface AlertHistoryItem {
+  id: number;
+  user_id: string;
+  title: string;
+  summary?: string | null;
+  severity?: string | null;
+  source: string;
+  source_id?: string | null;
+  channels: Record<string, boolean>;
+  triggered_at: string;
+  created_at: string;
+  payload?: Record<string, unknown> | null;
+}
+
+export interface AlertHistoryResponse {
+  items: AlertHistoryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
+export const listAlertHistory = async (params: {
+  userId: string;
+  page?: number;
+  pageSize?: number;
+  source?: string;
+  severity?: string;
+  channel?: string;
+  search?: string;
+}) => {
+  const { userId, page = 1, pageSize = 20, source, severity, channel, search } = params;
+  const { data } = await client.get<AlertHistoryResponse>('/map-service/api/v1/alerts/history', {
+    params: {
+      user_id: userId,
+      page,
+      page_size: pageSize,
+      source,
+      severity,
+      channel,
+      search,
+    },
+  });
+  return data;
+};
