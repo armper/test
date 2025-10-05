@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import type { Feature } from 'geojson';
 import type { LatLngLiteral } from 'leaflet';
@@ -32,7 +32,7 @@ const Dashboard = () => {
   const [customAlertsLoading, setCustomAlertsLoading] = useState(false);
   const [customAlertsError, setCustomAlertsError] = useState<string | null>(null);
 
-  const loadAlerts = () => {
+  const loadAlerts = useCallback(() => {
     fetchAlerts()
       .then((items) => {
         const filtered = items.filter((alert) => !mutedAlerts.some((entry) => entry.id === String(alert.id)));
@@ -48,11 +48,11 @@ const Dashboard = () => {
         setAlertsError('We could not load NOAA alerts.');
         showToast('We could not load NOAA alerts.', 'error');
       });
-  };
+  }, [mutedAlerts, showToast]);
 
   useEffect(() => {
     loadAlerts();
-  }, [mutedAlerts, showToast]);
+  }, [loadAlerts]);
 
   useEffect(() => {
     if (!user) {

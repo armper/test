@@ -34,12 +34,6 @@ const CustomAlertsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAlert, setEditingAlert] = useState<ConditionSubscription | undefined>(undefined);
-  const recentActivity = useMemo(() => {
-    return customAlerts
-      .filter((alert) => alert.last_triggered_at)
-      .sort((a, b) => (new Date(b.last_triggered_at ?? 0).getTime() - new Date(a.last_triggered_at ?? 0).getTime()))
-      .slice(0, 5);
-  }, [customAlerts]);
   const { location: browserLocation } = useBrowserLocation(true);
 
   const initialLocation = useMemo(() => {

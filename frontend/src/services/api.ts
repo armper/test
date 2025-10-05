@@ -47,7 +47,7 @@ export const fetchProfile = async () => {
 
 export const fetchAlerts = async () => {
   try {
-    const { data } = await client.get('/alert-service/alerts');
+    const { data } = await client.get('/map-service/api/v1/alerts');
     return data;
   } catch (error: any) {
     if (error?.response?.status === 404) {

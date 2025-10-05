@@ -1,16 +1,20 @@
 import json
 from pathlib import Path
-from typing import List
+from datetime import datetime
+from typing import Any, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.exc import CompileError
 from sqlalchemy.orm import Session
 
 from ..core import deps
 from ..core.config import settings
 from ..db.base import Base
 from ..db.session import engine
+from ..models.alert import Alert
 from ..models.region import Region
-from ..schemas import RegionCreate, RegionResponse, RegionUpdate
+from ..schemas import AlertSummary, RegionCreate, RegionResponse, RegionUpdate
 from ..services.geoutil import geojson_to_geometry, geometry_to_geojson
 
 router = APIRouter()
@@ -18,7 +22,10 @@ router = APIRouter()
 
 @router.on_event("startup")
 def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except CompileError:
+        Alert.__table__.create(bind=engine, checkfirst=True)
 
 
 @router.get("/cities")
@@ -27,6 +34,44 @@ def list_cities() -> dict:
     if not path.exists():
         raise HTTPException(status_code=500, detail="City dataset missing")
     return json.loads(path.read_text())
+
+
+@router.get("/alerts", response_model=List[AlertSummary])
+def list_alerts(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(deps.get_db_session),
+) -> List[AlertSummary]:
+    stmt = select(Alert).order_by(Alert.sent.desc(), Alert.created_at.desc()).limit(limit)
+    records = db.execute(stmt).scalars().all()
+
+    def _parse_sent(value: Any, fallback: datetime) -> datetime:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned.endswith("Z"):
+                cleaned = cleaned[:-1] + "+00:00"
+            try:
+                return datetime.fromisoformat(cleaned)
+            except ValueError:
+                pass
+        return fallback
+
+    payload: List[AlertSummary] = []
+    for record in records:
+        normalized = record.normalized or {}
+        sent_fallback = record.sent or record.created_at
+        payload.append(
+            AlertSummary(
+                id=record.id,
+                external_id=record.external_id,
+                title=record.get_title(),
+                event=record.get_event(),
+                severity=record.get_severity(),
+                sent=_parse_sent(normalized.get("sent"), sent_fallback),
+            )
+        )
+    return payload
 
 
 @router.post("/regions", response_model=RegionResponse)
