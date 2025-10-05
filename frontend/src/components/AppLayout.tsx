@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const NAV_SECTIONS = [
   {
@@ -28,6 +29,7 @@ const NAV_SECTIONS = [
 
 const AppLayout = () => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
 
@@ -46,9 +48,20 @@ const AppLayout = () => {
           <h1>Weather Alerts</h1>
           <small>{user?.email}</small>
         </div>
+        <div className="header-actions">
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={toggleTheme}
+            aria-pressed={theme === 'light'}
+            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          >
+            {theme === 'light' ? '🌞' : '🌙'}
+          </button>
         <button className="signout" onClick={logout}>
           Sign out
         </button>
+        </div>
       </header>
 
       <aside className="app-nav">
