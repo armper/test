@@ -2,7 +2,24 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import Column, DateTime, Integer, String
-from sqlalchemy.types import JSON
+from sqlalchemy.types import JSON, TypeDecorator
+
+
+class JSONFlexible(TypeDecorator):
+    """Use JSONB on PostgreSQL while keeping compatibility with SQLite tests."""
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":  # pragma: no cover - requires PostgreSQL dialect
+            from sqlalchemy.dialects.postgresql import JSONB
+
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
+
+
+JSONType = JSONFlexible
 
 from ..db.base_class import Base
 
@@ -21,7 +38,7 @@ class AlertDeliveryHistory(Base):
     title = Column(String, nullable=False)
     summary = Column(String, nullable=True)
     severity = Column(String, nullable=True)
-    channels = Column(JSON, nullable=False, default=dict)
+    channels = Column(JSONType, nullable=False, default=dict)
     triggered_at = Column(DateTime(timezone=True), nullable=False, index=True)
     payload = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)

@@ -2,7 +2,22 @@ from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
-from sqlalchemy.types import JSON
+from sqlalchemy.types import JSON, TypeDecorator
+
+
+class JSONFlexible(TypeDecorator):
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":  # pragma: no cover - requires PostgreSQL dialect
+            from sqlalchemy.dialects.postgresql import JSONB
+
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
+
+
+JSONType = JSONFlexible
 
 from .db import Base
 
@@ -20,7 +35,7 @@ class ConditionAlert(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     radius_km = Column(Float, nullable=True)
-    channel_overrides = Column(JSON, nullable=False, default=dict)
+    channel_overrides = Column(JSONType, nullable=False, default=dict)
     is_active = Column(Boolean, nullable=False, default=True)
     metadata_json = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -37,7 +52,7 @@ class UserPreference(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(String, unique=True, nullable=False)
-    channels = Column(JSON, nullable=False, default=dict)
+    channels = Column(JSONType, nullable=False, default=dict)
     quiet_hours = Column(JSON, nullable=True)
     severity_filter = Column(String, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)

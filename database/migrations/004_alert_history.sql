@@ -14,4 +14,8 @@ CREATE TABLE IF NOT EXISTS alert_delivery_history (
 
 CREATE INDEX IF NOT EXISTS idx_alert_history_user_id ON alert_delivery_history (user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_history_triggered_at ON alert_delivery_history (triggered_at DESC);
-CREATE INDEX IF NOT EXISTS idx_alert_history_source ON alert_delivery_history (source);
+CREATE INDEX IF NOT EXISTS idx_alert_history_user_source ON alert_delivery_history (user_id, source);
+CREATE INDEX IF NOT EXISTS idx_alert_history_user_severity ON alert_delivery_history (user_id, severity);
+CREATE INDEX IF NOT EXISTS idx_alert_history_lower_source ON alert_delivery_history (LOWER(source));
+CREATE INDEX IF NOT EXISTS idx_alert_history_lower_severity ON alert_delivery_history (LOWER(severity));
+CREATE INDEX IF NOT EXISTS idx_alert_history_channels_gin ON alert_delivery_history USING GIN (channels);
