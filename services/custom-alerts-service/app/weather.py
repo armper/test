@@ -13,6 +13,7 @@ class NoaaWeatherClient:
         self._external_client = client is not None
         self._client = client or httpx.AsyncClient(
             timeout=15.0,
+            follow_redirects=True,
             headers={
                 "User-Agent": settings.noaa_user_agent,
                 "Accept": "application/geo+json",

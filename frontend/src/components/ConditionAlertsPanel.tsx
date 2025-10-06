@@ -111,6 +111,9 @@ const CustomAlertForm = ({
       const regionId = metadata.region_id ?? metadata.regionId ?? metadata.regionID;
       const matchedRegion = typeof regionId === 'number' ? regions.find((region) => region.id === regionId) : undefined;
       const selectedRegionId: FormState['selectedRegionId'] = matchedRegion ? matchedRegion.id : 'custom';
+      const radiusKm = selectedRegionId === 'custom'
+        ? alert.radius_km ?? DEFAULT_RADIUS_KM
+        : 0;
       return {
         condition_type: alert.condition_type,
         label: alert.label,
@@ -119,7 +122,7 @@ const CustomAlertForm = ({
         longitude: alert.longitude,
         selectedRegionId,
         cooldownMinutes: metadata.cooldown_minutes ?? 60,
-        radiusKm: alert.radius_km ?? DEFAULT_RADIUS_KM,
+        radiusKm,
       };
     }
 
@@ -128,6 +131,7 @@ const CustomAlertForm = ({
     const defaultRegion = regions[0];
     const fallbackLat = defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lat : undefined;
     const fallbackLng = defaultRegion ? extractRegionCenter(defaultRegion.area_geojson)?.lng : undefined;
+    const selectedRegionId: FormState['selectedRegionId'] = defaultRegion ? defaultRegion.id : 'custom';
 
     return {
       condition_type: startingType,
@@ -135,9 +139,9 @@ const CustomAlertForm = ({
       threshold_value: config.defaultThreshold,
       latitude: fallbackLat ?? initialLocation.lat,
       longitude: fallbackLng ?? initialLocation.lng,
-      selectedRegionId: defaultRegion ? defaultRegion.id : 'custom',
+      selectedRegionId,
       cooldownMinutes: 60,
-      radiusKm: DEFAULT_RADIUS_KM,
+      radiusKm: selectedRegionId === 'custom' ? DEFAULT_RADIUS_KM : 0,
     };
   }, [alert, initialLocation.lat, initialLocation.lng, regions]);
 
@@ -256,7 +260,8 @@ const CustomAlertForm = ({
 
   const handleLocationChange = (coords: LatLngLiteral) => {
     clearCitySelection();
-    updateForm({ latitude: coords.lat, longitude: coords.lng, selectedRegionId: 'custom' });
+    const nextRadius = form.radiusKm > 0 ? form.radiusKm : DEFAULT_RADIUS_KM;
+    updateForm({ latitude: coords.lat, longitude: coords.lng, selectedRegionId: 'custom', radiusKm: nextRadius });
   };
 
   const handleRadiusChange = (value: string | number) => {
@@ -272,7 +277,8 @@ const CustomAlertForm = ({
     if (value === 'custom') {
       setIsCreatingArea(false);
       setDraftFeature(null);
-      updateForm({ selectedRegionId: 'custom' });
+      const nextRadius = form.radiusKm > 0 ? form.radiusKm : DEFAULT_RADIUS_KM;
+      updateForm({ selectedRegionId: 'custom', radiusKm: nextRadius });
       setHighlightNonce((prev) => prev + 1);
       return;
     }
@@ -284,7 +290,7 @@ const CustomAlertForm = ({
     const center = extractRegionCenter(region.area_geojson) ?? { lat: form.latitude, lng: form.longitude };
     setIsCreatingArea(false);
     setDraftFeature(null);
-    updateForm({ selectedRegionId: id, latitude: center.lat, longitude: center.lng });
+    updateForm({ selectedRegionId: id, latitude: center.lat, longitude: center.lng, radiusKm: 0 });
     clearCitySelection();
   };
 
@@ -336,6 +342,8 @@ const CustomAlertForm = ({
 
       const metadata = Object.keys(nextMetadata).length ? nextMetadata : undefined;
 
+      const radiusForPayload = form.selectedRegionId === 'custom' ? form.radiusKm : 0;
+
       if (alert) {
         const payload: ConditionSubscriptionUpdatePayload = {
           label: form.label,
@@ -345,7 +353,7 @@ const CustomAlertForm = ({
           metadata,
           latitude: form.latitude,
           longitude: form.longitude,
-          radius_km: form.radiusKm,
+          radius_km: radiusForPayload,
         };
         await updateConditionSubscription(alert.id, payload);
       } else {
@@ -356,7 +364,7 @@ const CustomAlertForm = ({
           threshold_value: form.threshold_value,
           latitude: form.latitude,
           longitude: form.longitude,
-          radius_km: form.radiusKm,
+          radius_km: radiusForPayload,
           metadata,
         };
         await createConditionSubscription(payload);
@@ -386,7 +394,8 @@ const CustomAlertForm = ({
 
     const center = extractRegionCenter(cityOption);
     if (center) {
-      updateForm({ latitude: center.lat, longitude: center.lng, selectedRegionId: 'custom' });
+      const nextRadius = form.radiusKm > 0 ? form.radiusKm : DEFAULT_RADIUS_KM;
+      updateForm({ latitude: center.lat, longitude: center.lng, selectedRegionId: 'custom', radiusKm: nextRadius });
     }
     setIsCreatingArea(false);
     setDraftFeature(null);
@@ -476,6 +485,9 @@ const CustomAlertForm = ({
       setCreatingRegion(false);
     }
   };
+
+  const showRadiusControls = form.selectedRegionId === 'custom';
+  const radiusForMap = showRadiusControls ? form.radiusKm : 0;
 
   return (
     <form className="condition-form" onSubmit={handleSubmit}>
@@ -569,25 +581,27 @@ const CustomAlertForm = ({
               longitude={form.longitude}
               onChange={handleLocationChange}
               highlight={highlightGeometry ?? undefined}
-              radiusKm={form.radiusKm}
+              radiusKm={radiusForMap}
             />
 
-            <div className="field">
-              <label htmlFor="alert-radius">Alert radius</label>
-              <input
-                id="alert-radius"
-                type="range"
-                min={MIN_RADIUS_KM}
-                max={MAX_RADIUS_KM}
-                step={0.5}
-                value={form.radiusKm}
-                onChange={(event) => handleRadiusChange(event.target.value)}
-              />
-              <small>
-                Map circle spans about {form.radiusKm.toFixed(1)} km (~
-                {(form.radiusKm * KM_TO_MILES).toFixed(1)} miles).
-              </small>
-            </div>
+            {showRadiusControls ? (
+              <div className="field">
+                <label htmlFor="alert-radius">Alert radius</label>
+                <input
+                  id="alert-radius"
+                  type="range"
+                  min={MIN_RADIUS_KM}
+                  max={MAX_RADIUS_KM}
+                  step={0.5}
+                  value={form.radiusKm}
+                  onChange={(event) => handleRadiusChange(event.target.value)}
+                />
+                <small>
+                  Map circle spans about {form.radiusKm.toFixed(1)} km (~
+                  {(form.radiusKm * KM_TO_MILES).toFixed(1)} miles).
+                </small>
+              </div>
+            ) : null}
 
             <ForecastPreview latitude={form.latitude} longitude={form.longitude} />
 
@@ -607,12 +621,14 @@ const CustomAlertForm = ({
                 <strong>Longitude</strong>
                 <span>{form.longitude.toFixed(4)}</span>
               </div>
-              <div>
-                <strong>Radius</strong>
-                <span>
-                  {form.radiusKm.toFixed(1)} km ({(form.radiusKm * KM_TO_MILES).toFixed(1)} mi)
-                </span>
-              </div>
+              {showRadiusControls ? (
+                <div>
+                  <strong>Radius</strong>
+                  <span>
+                    {form.radiusKm.toFixed(1)} km ({(form.radiusKm * KM_TO_MILES).toFixed(1)} mi)
+                  </span>
+                </div>
+              ) : null}
             </div>
           </>
         )}

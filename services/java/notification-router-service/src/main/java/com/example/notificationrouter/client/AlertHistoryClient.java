@@ -31,14 +31,18 @@ public class AlertHistoryClient {
     private final ObjectMapper objectMapper;
     private final URI historyUri;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AlertHistoryClient(
         RestTemplateBuilder builder,
         ObjectMapper objectMapper,
-        @Value("${alerts.history.base-url:http://map-service:8000/api/v1/alerts/history}") String baseUrl
+        @Value("${alerts.history.base-url:http://map-service:8003/api/v1/alerts/history}") String baseUrl
     ) {
-        this(builder.setConnectTimeout(java.time.Duration.ofSeconds(3))
-                .setReadTimeout(java.time.Duration.ofSeconds(5))
-                .build(), objectMapper, baseUrl);
+        this.objectMapper = objectMapper;
+        this.restTemplate = builder
+            .setConnectTimeout(java.time.Duration.ofSeconds(3))
+            .setReadTimeout(java.time.Duration.ofSeconds(5))
+            .build();
+        this.historyUri = URI.create(baseUrl);
     }
 
     AlertHistoryClient(RestTemplate restTemplate, ObjectMapper objectMapper, String baseUrl) {

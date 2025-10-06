@@ -46,8 +46,8 @@ class ConditionSubscriptionBase(BaseModel):
     def validate_radius(cls, value):  # type: ignore[override]
         if value is None:
             return value
-        if value <= 0:
-            raise ValueError("radius_km must be positive")
+        if value < 0:
+            raise ValueError("radius_km must be non-negative")
         return value
 
 
@@ -78,8 +78,8 @@ class ConditionSubscriptionUpdate(BaseModel):
     def validate_radius(cls, value):  # type: ignore[override]
         if value is None:
             return value
-        if value <= 0:
-            raise ValueError("radius_km must be positive")
+        if value < 0:
+            raise ValueError("radius_km must be non-negative")
         return value
 
 

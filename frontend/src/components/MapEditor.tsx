@@ -8,6 +8,7 @@ import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
 
 import '../utils/leafletDefaultIcon';
+import { patchLeafletDraw } from '../utils/patchLeafletDraw';
 
 interface MapEditorProps {
   center: LatLngExpression;
@@ -16,6 +17,8 @@ interface MapEditorProps {
   showControls?: boolean;
   height?: number;
 }
+
+patchLeafletDraw();
 
 const MapEditor = ({ center, onSave, initialFeature = null, showControls = true, height = 400 }: MapEditorProps) => {
   const [featureGroup, setFeatureGroup] = useState<LeafletFeatureGroup | null>(null);

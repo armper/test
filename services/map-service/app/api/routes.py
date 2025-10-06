@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import CompileError
 from sqlalchemy.orm import Session
 
@@ -94,43 +94,60 @@ def list_alert_history(
     search: Optional[str] = Query(None, min_length=2, max_length=120),
     db: Session = Depends(deps.get_db_session),
 ) -> AlertHistoryResponse:
-    records = (
-        db.query(AlertDeliveryHistory)
-        .filter(AlertDeliveryHistory.user_id == user_id)
-        .order_by(AlertDeliveryHistory.triggered_at.desc(), AlertDeliveryHistory.id.desc())
-        .all()
-    )
-
     search_lower = search.lower() if search else None
     source_lower = source.lower() if source else None
     severity_lower = severity.lower() if severity else None
     channel_lower = channel.lower() if channel else None
 
-    filtered: List[AlertDeliveryHistory] = []
-    # SQLite used in tests lacks rich JSON operators, so apply flexible filtering in Python space.
-    for record in records:
-        if source_lower and (record.source or "").lower() != source_lower:
-            continue
-        if severity_lower and (record.severity or "").lower() != severity_lower:
-            continue
-        if channel_lower:
-            channels = [name.lower() for name in record.channel_list()]
-            if channel_lower not in channels:
-                continue
-        if search_lower:
-            haystacks = [record.title or "", record.summary or ""]
-            if record.payload and isinstance(record.payload, dict):
-                description = record.payload.get("description")
-                if isinstance(description, str):
-                    haystacks.append(description)
-            if not any(search_lower in text.lower() for text in haystacks if text):
-                continue
-        filtered.append(record)
+    base_query = db.query(AlertDeliveryHistory).filter(AlertDeliveryHistory.user_id == user_id)
 
-    total = len(filtered)
+    bind = db.get_bind()
+    dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+    supports_json_filters = dialect_name == "postgresql"
+
+    if source_lower:
+        base_query = base_query.filter(func.lower(AlertDeliveryHistory.source) == source_lower)
+    if severity_lower:
+        base_query = base_query.filter(func.lower(AlertDeliveryHistory.severity) == severity_lower)
+    if search_lower:
+        pattern = f"%{search_lower}%"
+        base_query = base_query.filter(
+            or_(
+                func.lower(AlertDeliveryHistory.title).like(pattern),
+                func.lower(AlertDeliveryHistory.summary).like(pattern),
+            )
+        )
+    if channel_lower and supports_json_filters:
+        base_query = base_query.filter(AlertDeliveryHistory.channels.contains({channel_lower: True}))
+
+    ordered_query = base_query.order_by(
+        AlertDeliveryHistory.triggered_at.desc(),
+        AlertDeliveryHistory.id.desc(),
+    )
+
     start = (page - 1) * page_size
     end = start + page_size
-    items = filtered[start:end]
+
+    if channel_lower and not supports_json_filters:
+        # Fallback to in-memory filtering when channel-specific filtering is requested to maintain
+        # compatibility with both SQLite (tests) and PostgreSQL (production) backends.
+        records = ordered_query.all()
+        filtered = [
+            record
+            for record in records
+            if channel_lower in {name.lower() for name in record.channel_list()}
+        ]
+        total = len(filtered)
+        items = filtered[start:end]
+    else:
+        total = base_query.count()
+        items = (
+            ordered_query
+            .offset(start)
+            .limit(page_size)
+            .all()
+        )
+
     has_next = end < total
 
     return AlertHistoryResponse(
